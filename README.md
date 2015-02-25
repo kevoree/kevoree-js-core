@@ -1,2 +1,3 @@
-# kevoree-js-core
-Kevoree JavaScript core platform
+Kevoree :: Javascript :: Core
+===============================
+TODO
