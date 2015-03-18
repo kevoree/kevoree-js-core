@@ -267,11 +267,11 @@ var Core = Class({
             }.bind(this));
         }.bind(this);
 
-        if (typeof (this.intervalId) !== 'undefined' && this.intervalId !== null && this.nodeInstance !== null) {
+        if (typeof (this.intervalId) !== 'undefined' && this.intervalId !== null) {
             var factory = new kevoree.factory.DefaultKevoreeFactory();
             var cloner = factory.createModelCloner();
             var stopModel = cloner.clone(this.currentModel, false);
-            var node = stopModel.findNodesByID(this.nodeInstance.getName());
+            var node = stopModel.findNodesByID(this.nodeName);
             var subNodes = node.hosts.iterator();
             while (subNodes.hasNext()) {
                 subNodes.next().delete();
@@ -305,6 +305,9 @@ var Core = Class({
 
             this.stopping = true;
             this.deploy(stopModel);
+        } else {
+            stopRuntime();
+            this.emitter.emit('stopped');
         }
     },
 
