@@ -1,7 +1,7 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.KevoreeCore = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 (function (process){
 var Class         = require('pseudoclass'),
-    kevoree       = require('kevoree-model'),
+    kevoree       = require('kevoree-library'),
     KevoreeLogger = require('kevoree-commons').KevoreeLogger,
     async         = require('async'),
     os            = require('os'),
@@ -446,7 +446,7 @@ var pushInArray = function pushInArray(array, model) {
 module.exports = Core;
 
 }).call(this,require('_process'))
-},{"_process":5,"async":2,"events":3,"kevoree-commons":6,"kevoree-model":15,"os":4,"pseudoclass":18}],2:[function(require,module,exports){
+},{"_process":5,"async":2,"events":3,"kevoree-commons":6,"kevoree-library":15,"os":4,"pseudoclass":18}],2:[function(require,module,exports){
 (function (process){
 /*!
  * async
@@ -43046,7 +43046,9 @@ if (!Kotlin.modules['kevoree']) {
 }
 
 module.exports = Kotlin.modules['kevoree'].org.kevoree;
-
+module.exports.org = {
+  kevoree: Kotlin.modules['kevoree'].org.kevoree
+}
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"kevoree-kotlin":16}],16:[function(require,module,exports){
 module.exports = require('./lib/kotlin');

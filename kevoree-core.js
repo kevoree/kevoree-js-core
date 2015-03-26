@@ -1,5 +1,5 @@
 var Class         = require('pseudoclass'),
-    kevoree       = require('kevoree-model'),
+    kevoree       = require('kevoree-library'),
     KevoreeLogger = require('kevoree-commons').KevoreeLogger,
     async         = require('async'),
     os            = require('os'),
