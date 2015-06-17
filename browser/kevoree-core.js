@@ -29553,6 +29553,9 @@ if (!Kotlin.modules['kevoree']) {
                   tempResult.v.put_wn2jw4$(root.path(), root);
                   while (extractedQuery != null) {
                     var staticExtractedQuery = extractedQuery != null ? extractedQuery : Kotlin.throwNPE();
+                    for (var key in staticExtractedQuery.params.map) {
+                      staticExtractedQuery.params.map[key].value = '^'+staticExtractedQuery.params.map[key].value+'$';
+                    }
                     var clonedRound = tempResult.v;
                     tempResult.v = new Kotlin.PrimitiveHashMap();
                     {
