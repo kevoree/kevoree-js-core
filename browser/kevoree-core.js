@@ -204,7 +204,7 @@ var Core = Class({
                                     // reset deployModel
                                     core.deployModel = null;
                                     // adaptations succeed : woot
-                                    core.log.debug(core.toString(), 'Model deployed successfully: '+adaptations.length+' adaptations ('+(new Date().getTime() - start)+'ms)');
+                                    core.log.info(core.toString(), 'Model deployed successfully: '+adaptations.length+' adaptations ('+(new Date().getTime() - start)+'ms)');
                                     // all good :)
                                     if (typeof (core.nodeInstance.onModelDeployed) === 'function') { // backward compatibility with kevoree-entities < 2.1.0
                                         core.nodeInstance.onModelDeployed();
