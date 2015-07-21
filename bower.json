@@ -1,7 +1,7 @@
 {
   "name": "kevoree-core",
   "main": "browser/kevoree-core.js",
-  "version": "7.0.6",
+  "version": "7.1.0",
   "homepage": "https://github.com/kevoree/kevoree-js-core",
   "authors": [
     "Maxime Tricoire <max.tricoire@gmail.com>"

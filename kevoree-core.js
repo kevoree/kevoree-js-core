@@ -30,7 +30,6 @@ var Core = Class({
         this.modulesPath    = modulesPath;
         this.bootstrapper   = null;
         this.intervalId     = null;
-        this.uiCommand      = null;
 
         this.emitter = new EventEmitter();
         var defaultEmit = this.emitter.emit;
@@ -110,118 +109,124 @@ var Core = Class({
      * @emit rollbackSucceed
      */
     deploy: function (model) {
-        this.emitter.emit('deploying', model);
-        if (model && !model.findNodesByID(this.nodeName)) {
-            this.emitter.emit('error', new Error('Deploy model failure: unable to find '+this.nodeName+' in given model'));
+        if (!this.deployModel) {
+            this.emitter.emit('deploying', model);
+            if (model && !model.findNodesByID(this.nodeName)) {
+                this.emitter.emit('error', new Error('Deploy model failure: unable to find '+this.nodeName+' in given model'));
 
-        } else {
-            this.log.debug(this.toString(), 'Deploy process started...');
-            var start = new Date().getTime();
-            if (model) {
-                // check if there is an instance currently running
-                // if not, it will try to run it
-                var core = this;
-                this.checkBootstrapNode(model, function (err) {
-                    if (err) {
-                        core.emitter.emit('error', err);
-                        return;
-                    }
-
-                    if (core.nodeInstance) {
-                        try {
-                            // given model is defined and not null
-                            var factory = new kevoree.factory.DefaultKevoreeFactory();
-                            // clone model so that adaptations won't modify the current one
-                            var cloner = factory.createModelCloner();
-                            core.deployModel = cloner.clone(model, true);
-                            // set it read-only to ensure adaptations consistency
-                            core.deployModel.setRecursiveReadOnly();
-                            // make a diff between the current model and the model to deploy
-                            var diffSeq = factory.createModelCompare().diff(core.currentModel, core.deployModel);
-                            // ask the node platform to create the needed adaptation primitives
-                            var adaptations = core.nodeInstance.processTraces(diffSeq, core.deployModel);
-                            var cmdStack = [];
-
-                            // executeCommand: function that save cmd to stack and executes it
-                            function executeCommand(cmd, iteratorCallback) {
-                                // save the cmd to be processed in a stack using unshift
-                                // in order to add the last processed cmd at the beginning of the array
-                                // => cmdStack[0] = more recently executed cmd
-                                cmdStack.unshift(cmd);
-
-                                // execute cmd
-                                cmd.execute(function (err) {
-                                    if (err) {
-                                        if (core.stopping) {
-                                            // log error
-                                            core.log.error(cmd.toString(), 'Fail adaptation skipped: '+err.message);
-                                            // but continue adaptation because we are stopping runtime anyway
-                                            err = null;
-                                        }
-                                    }
-                                    iteratorCallback(err);
-                                });
-                            }
-
-                            // rollbackCommand: function that calls undo() on cmds in the stack
-                            function rollbackCommand(cmd, iteratorCallback) {
-                                try {
-                                    cmd.undo(iteratorCallback);
-                                } catch (err) {
-                                    iteratorCallback(err);
-                                }
-                            }
-
-                            // execute each command synchronously
-                            async.eachSeries(adaptations, executeCommand, function (err) {
-                                if (err) {
-                                    err.message = "Something went wrong while processing adaptations.\n"+err.message;
-                                    core.log.error(core.toString(), err.stack);
-                                    core.emitter.emit('adaptationError', err);
-                                    core.log.info(core.toString(), 'Rollbacking to previous model...');
-
-                                    // rollback process
-                                    async.eachSeries(cmdStack, rollbackCommand, function (er) {
-                                        if (er) {
-                                            // something went wrong while rollbacking
-                                            er.message = "Something went wrong while rollbacking. Process will exit.\n"+er.message;
-                                            core.log.error(core.toString(), er.stack);
-                                            // stop everything :/
-                                            core.stop();
-                                            core.emitter.emit('rollbackError', er);
-                                            // rollback succeed
-                                            core.emitter.emit('rollbackSucceed');
-                                        }
-                                    });
-
-                                } else {
-                                    // save old model
-                                    pushInArray(core.models, core.currentModel);
-                                    // set current model
-                                    core.currentModel = cloner.clone(model, false);
-                                    // reset deployModel
-                                    core.deployModel = null;
-                                    // adaptations succeed : woot
-                                    core.log.info(core.toString(), 'Model deployed successfully: '+adaptations.length+' adaptations ('+(new Date().getTime() - start)+'ms)');
-                                    // all good :)
-                                    if (typeof (core.nodeInstance.onModelDeployed) === 'function') { // backward compatibility with kevoree-entities < 2.1.0
-                                        core.nodeInstance.onModelDeployed();
-                                    }
-                                    core.emitter.emit('deployed', core.currentModel);
-                                }
-                            });
-                        } catch (err) {
-                            core.log.error(core.toString(), 'Deployment failed.\n'+err.stack);
-                            core.emitter.emit('deployError');
+            } else {
+                this.log.debug(this.toString(), 'Deploy process started...');
+                var start = new Date().getTime();
+                if (model) {
+                    // check if there is an instance currently running
+                    // if not, it will try to run it
+                    var core = this;
+                    this.checkBootstrapNode(model, function (err) {
+                        if (err) {
+                            core.emitter.emit('error', err);
+                            return;
                         }
 
-                    } else {
-                        core.emitter.emit('error', new Error("There is no instance to bootstrap on"));
-                    }
-                });
-            } else {
-                this.emitter.emit('error', new Error("Model is not defined or null. Deploy aborted."));
+                        if (core.nodeInstance) {
+                            try {
+                                // given model is defined and not null
+                                var factory = new kevoree.factory.DefaultKevoreeFactory();
+                                // clone model so that adaptations won't modify the current one
+                                var cloner = factory.createModelCloner();
+                                core.deployModel = cloner.clone(model, true);
+                                // set it read-only to ensure adaptations consistency
+                                core.deployModel.setRecursiveReadOnly();
+                                // make a diff between the current model and the model to deploy
+                                var diffSeq = factory.createModelCompare().diff(core.currentModel, core.deployModel);
+                                // ask the node platform to create the needed adaptation primitives
+                                var adaptations = core.nodeInstance.processTraces(diffSeq, core.deployModel);
+                                var cmdStack = [];
+
+                                // executeCommand: function that save cmd to stack and executes it
+                                function executeCommand(cmd, iteratorCallback) {
+                                    // save the cmd to be processed in a stack using unshift
+                                    // in order to add the last processed cmd at the beginning of the array
+                                    // => cmdStack[0] = more recently executed cmd
+                                    cmdStack.unshift(cmd);
+
+                                    // execute cmd
+                                    cmd.execute(function (err) {
+                                        if (err) {
+                                            if (core.stopping) {
+                                                // log error
+                                                core.log.error(cmd.toString(), 'Fail adaptation skipped: '+err.message);
+                                                // but continue adaptation because we are stopping runtime anyway
+                                                err = null;
+                                            }
+                                        }
+                                        iteratorCallback(err);
+                                    });
+                                }
+
+                                // rollbackCommand: function that calls undo() on cmds in the stack
+                                function rollbackCommand(cmd, iteratorCallback) {
+                                    try {
+                                        cmd.undo(iteratorCallback);
+                                    } catch (err) {
+                                        iteratorCallback(err);
+                                    }
+                                }
+
+                                // execute each command synchronously
+                                async.eachSeries(adaptations, executeCommand, function (err) {
+                                    if (err) {
+                                        err.message = "Something went wrong while processing adaptations.\n"+err.message;
+                                        core.log.error(core.toString(), err.stack);
+                                        core.emitter.emit('adaptationError', err);
+                                        core.log.info(core.toString(), 'Rollbacking to previous model...');
+
+                                        // rollback process
+                                        async.eachSeries(cmdStack, rollbackCommand, function (er) {
+                                            if (er) {
+                                                // something went wrong while rollbacking
+                                                er.message = "Something went wrong while rollbacking. Process will exit.\n"+er.message;
+                                                core.log.error(core.toString(), er.stack);
+                                                // stop everything :/
+                                                core.stop();
+                                                core.emitter.emit('rollbackError', er);
+                                                // rollback succeed
+                                                core.emitter.emit('rollbackSucceed');
+                                            }
+                                        });
+
+                                    } else {
+                                        // save old model
+                                        pushInArray(core.models, core.currentModel);
+                                        // set current model
+                                        core.currentModel = cloner.clone(model, false);
+                                        // reset deployModel
+                                        core.deployModel = null;
+                                        // adaptations succeed : woot
+                                        core.log.info(core.toString(), 'Model deployed successfully: '+adaptations.length+' adaptations ('+(new Date().getTime() - start)+'ms)');
+                                        // all good :)
+                                        if (typeof (core.nodeInstance.onModelDeployed) === 'function') { // backward compatibility with kevoree-entities < 2.1.0
+                                            core.nodeInstance.onModelDeployed();
+                                        }
+                                        core.emitter.emit('deployed', core.currentModel);
+                                    }
+                                });
+                            } catch (err) {
+                                core.log.error(core.toString(), 'Deployment failed.\n'+err.stack);
+                                core.emitter.emit('deployError');
+                            }
+
+                        } else {
+                            core.emitter.emit('error', new Error("There is no instance to bootstrap on"));
+                        }
+                    });
+                } else {
+                    this.emitter.emit('error', new Error("Model is not defined or null. Deploy aborted."));
+                }
             }
+        } else {
+            // TODO add the possibility to put new deployment in pending queue
+            this.log.warn(this.toString(), 'New deploy process requested: aborted because another one is in process (retry later?)');
+            this.emitter.emit('deployError', 'New deploy process requested: aborted because another one is in process (retry later?)');
         }
     },
 
@@ -341,36 +346,8 @@ var Core = Class({
         this.bootstrapper = bootstrapper;
     },
 
-    setUICommand: function (uiCmd) {
-        this.uiCommand = uiCmd;
-    },
-
     getBootstrapper: function () {
         return this.bootstrapper;
-    },
-
-    /**
-     * Save model to hdd
-     */
-    saveModel: function () {
-        // TODO
-        this.log.warn(this.toString(), 'saveModel(): not implemented yet');
-    },
-
-    /**
-     * Put core in readonly mode
-     */
-    lock: function() {
-        // TODO
-        this.log.warn(this.toString(), 'lock(): not implemented yet');
-    },
-
-    /**
-     * Put core in read/write mode
-     */
-    unlock: function() {
-        // TODO
-        this.log.warn(this.toString(), 'unlock(): not implemented yet');
     },
 
     getCurrentModel: function () {
@@ -409,10 +386,6 @@ var Core = Class({
 
     getNodeName: function () {
         return this.nodeName;
-    },
-
-    getUICommand: function () {
-        return this.uiCommand;
     },
 
     getLogger: function () {
