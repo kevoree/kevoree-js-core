@@ -187,9 +187,12 @@ var Core = Class({
                                                 er.message = "Something went wrong while rollbacking. Process will exit.\n"+er.message;
                                                 core.log.error(core.toString(), er.stack);
                                                 // stop everything :/
+                                                core.deployModel = null;
                                                 core.stop();
                                                 core.emitter.emit('rollbackError', er);
+                                            } else {
                                                 // rollback succeed
+                                                core.deployModel = null;
                                                 core.emitter.emit('rollbackSucceed');
                                             }
                                         });
