@@ -1,132 +1,139 @@
-var Class         = require('pseudoclass'),
-    kevoree       = require('kevoree-library'),
+var kevoree       = require('kevoree-library'),
     KevoreeLogger = require('kevoree-commons').KevoreeLogger,
     async         = require('async'),
-    os            = require('os'),
+    util          = require('util'),
     EventEmitter  = require('events').EventEmitter;
 
 var NAME_PATTERN = /^[\w-]+$/;
 
 /**
- * Kevoree Core
  *
- * @type {Object}
+ * @param modulesPath
+ * @param logger
+ * @constructor
  */
-var Core = Class({
-    toString: 'KevoreeCore',
+function KevoreeCore(modulesPath, logger) {
+    this.log = (logger != undefined) ? logger : new KevoreeLogger(this.toString());
 
-    /**
-     * Core constructor
-     */
-    construct: function(modulesPath, logger) {
-        this.log = (logger != undefined) ? logger : new KevoreeLogger(this.toString());
+    this.stopping       = false;
+    this.currentModel   = null;
+    this.deployModel    = null;
+    this.nodeName       = null;
+    this.nodeInstance   = null;
+    this.modulesPath    = modulesPath;
+    this.bootstrapper   = null;
 
-        this.stopping       = false;
-        this.currentModel   = null;
-        this.deployModel    = null;
-        this.models         = [];
-        this.nodeName       = null;
-        this.nodeInstance   = null;
-        this.modulesPath    = modulesPath;
-        this.bootstrapper   = null;
-        this.intervalId     = null;
+    this.emitter = new EventEmitter();
+}
 
-        this.emitter = new EventEmitter();
-        var defaultEmit = this.emitter.emit;
-        this.emitter.emit = function () {
-            // emit event on process.nextTick to let a chance of catching it when registered after method call
-            // eg: var c = new KevoreeCore('/tmp');
-            // c.start('foo');
-            // c.on('started', function () { /* this wouldn't have been called without process.nextTick */ });
-            var args = arguments;
-            process.nextTick(function () {
-                defaultEmit.apply(this, args);
-            }.bind(this));
-        }.bind(this.emitter);
-    },
+util.inherits(KevoreeCore, EventEmitter);
 
-    /**
-     * Starts Kevoree Core
-     * @param nodeName
-     */
-    start: function (nodeName) {
-        if (!nodeName || nodeName.length === 0) {
-            nodeName = "node0";
+/**
+ *
+ * @param nodeName
+ */
+KevoreeCore.prototype.start = function (nodeName) {
+    if (!nodeName || nodeName.length === 0) {
+        nodeName = "node0";
+    }
+
+    if (nodeName.match(NAME_PATTERN)) {
+        this.nodeName = nodeName;
+        var factory = new kevoree.factory.DefaultKevoreeFactory();
+        this.currentModel = factory.createContainerRoot();
+        factory.root(this.currentModel);
+
+        // create platform node
+        var node = factory.createContainerNode();
+        node.name = this.nodeName;
+        node.started = false;
+
+        // add platform node
+        this.currentModel.addNodes(node);
+
+        var id = setInterval(function () {}, 10e10);
+        // hang-on until the core is stopped
+        this.emitter.on('stopped', function () {
+            clearInterval(id);
+            this.emit('stopped');
+        }.bind(this));
+
+        this.log.info(this.toString(), "Platform node name: "+nodeName);
+    } else {
+        throw new Error('Platform node name must match this regex '+NAME_PATTERN.toString());
+    }
+};
+
+/**
+ *
+ */
+KevoreeCore.prototype.stop = function () {
+    var factory = new kevoree.factory.DefaultKevoreeFactory();
+    var cloner = factory.createModelCloner();
+    var stopModel = cloner.clone(this.currentModel, false);
+    var node = stopModel.findNodesByID(this.nodeName);
+    node.started = false;
+    var subNodes = node.hosts.iterator();
+    while (subNodes.hasNext()) {
+        subNodes.next().delete();
+    }
+
+    var groups = node.groups.iterator();
+    while (groups.hasNext()) {
+        groups.next().delete();
+    }
+
+    var bindings = stopModel.mBindings.iterator();
+    while (bindings.hasNext()) {
+        var binding = bindings.next();
+        if (binding.port.eContainer()
+            && binding.port.eContainer().eContainer()
+            && binding.port.eContainer().eContainer().name === node.name) {
+            if (binding.hub) {
+                binding.hub.delete();
+            }
         }
+    }
 
-        if (nodeName.match(NAME_PATTERN)) {
-            this.nodeName = nodeName;
-            var factory = new kevoree.factory.DefaultKevoreeFactory();
-            this.currentModel = factory.createContainerRoot();
-            factory.root(this.currentModel);
+    var comps = node.components.iterator();
+    while (comps.hasNext()) {
+        comps.next().delete();
+    }
 
-            // create platform node
-            var node = factory.createContainerNode();
-            node.name = this.nodeName;
-            node.started = false;
-
-            // create node network interfaces
-            var net = factory.createNetworkInfo();
-            net.name = 'ip';
-            var ifaces = os.networkInterfaces();
-            for (var iface in ifaces) {
-                if (ifaces.hasOwnProperty(iface)) {
-                    var val = factory.createValue();
-                    val.name = iface+'_'+ifaces[iface][0].family;
-                    val.value = ifaces[iface][0].address;
-                    net.addValues(val);
-                }
-            }
-            // add net ifaces to node if any
-            if (net.values.size() > 0) {
-                node.addNetworkInformation(net);
-            }
-
-            // add platform node
-            this.currentModel.addNodes(node);
-
-            // starting loop function
-            this.intervalId = setInterval(function () {}, 1e8);
-
-            this.log.info(this.toString(), "Platform node name: "+nodeName);
-
-            this.emitter.emit('started');
+    this.stopping = true;
+    this.deploy(stopModel, function () {
+        if (this.nodeInstance === null) {
+            this.log.info(this.toString(), 'Platform stopped before bootstrapped');
+            this.emitter.emit('stopped');
         } else {
-            this.emitter.emit('error', new Error('Platform node name must match this regex '+NAME_PATTERN.toString()));
+            this.log.info(this.toString(), "Platform stopped: "+this.nodeInstance.getName());
+            this.emitter.emit('stopped');
         }
-    },
+    }.bind(this));
+};
 
-    /**
-     * Compare current with model
-     * Get traces and call command (that can be redefined)
-     *
-     * @param model ContainerRoot model
-     * @emit error
-     * @emit deploying
-     * @emit deployed
-     * @emit adaptationError
-     * @emit rollbackError
-     * @emit rollbackSucceed
-     */
-    deploy: function (model) {
-        if (!this.deployModel) {
-            this.emitter.emit('deploying', model);
-            if (model && !model.findNodesByID(this.nodeName)) {
-                this.emitter.emit('error', new Error('Deploy model failure: unable to find '+this.nodeName+' in given model'));
-
-            } else {
-                this.log.debug(this.toString(), 'Deploy process started...');
-                var start = new Date().getTime();
-                if (model) {
-                    // check if there is an instance currently running
-                    // if not, it will try to run it
-                    var core = this;
-                    this.checkBootstrapNode(model, function (err) {
-                        if (err) {
-                            core.emitter.emit('error', err);
-                            return;
-                        }
-
+/**
+ *
+ * @param model
+ * @param callback
+ */
+KevoreeCore.prototype.deploy = function (model, callback) {
+    callback = callback || function deployNoopCallback() {};
+    if (!this.deployModel) {
+        this.emit('deploying', model);
+        if (model && !model.findNodesByID(this.nodeName)) {
+            callback(new Error('Deploy model failure: unable to find '+this.nodeName+' in given model'));
+        } else {
+            this.log.debug(this.toString(), 'Deploy process started...');
+            var start = new Date().getTime();
+            if (model) {
+                // check if there is an instance currently running
+                // if not, it will try to run it
+                var core = this;
+                this.checkBootstrapNode(model, function (err) {
+                    if (err) {
+                        callback(err);
+                    } else {
                         if (core.nodeInstance) {
                             try {
                                 // given model is defined and not null
@@ -166,6 +173,7 @@ var Core = Class({
                                 // rollbackCommand: function that calls undo() on cmds in the stack
                                 function rollbackCommand(cmd, iteratorCallback) {
                                     try {
+                                        console.log('rollback cmd', cmd.toString());
                                         cmd.undo(iteratorCallback);
                                     } catch (err) {
                                         iteratorCallback(err);
@@ -177,31 +185,29 @@ var Core = Class({
                                     if (err) {
                                         err.message = "Something went wrong while processing adaptations.\n"+err.message;
                                         core.log.error(core.toString(), err.stack);
-                                        core.emitter.emit('adaptationError', err);
                                         core.log.info(core.toString(), 'Rollbacking to previous model...');
 
                                         // rollback process
-                                        async.eachSeries(cmdStack, rollbackCommand, function (er) {
-                                            if (er) {
+                                        async.eachSeries(cmdStack, rollbackCommand, function (err) {
+                                            if (err) {
                                                 // something went wrong while rollbacking
-                                                er.message = "Something went wrong while rollbacking. Process will exit.\n"+er.message;
-                                                core.log.error(core.toString(), er.stack);
+                                                err.message = "Something went wrong while rollbacking. Process will exit.\n"+err.message;
+                                                core.log.error(core.toString(), err.stack);
                                                 // stop everything :/
                                                 core.deployModel = null;
                                                 core.stop();
-                                                core.emitter.emit('rollbackError', er);
+                                                callback(err);
                                             } else {
                                                 // rollback succeed
+                                                core.log.info(core.toString(), 'Rollback succeed: '+cmdStack.length+' adaptations ('+(new Date().getTime() - start)+'ms)');
                                                 core.deployModel = null;
-                                                core.emitter.emit('rollbackSucceed');
+                                                callback();
                                             }
                                         });
 
                                     } else {
-                                        // save old model
-                                        pushInArray(core.models, core.currentModel);
                                         // set current model
-                                        core.currentModel = cloner.clone(model, false);
+                                        core.currentModel = model;
                                         // reset deployModel
                                         core.deployModel = null;
                                         // adaptations succeed : woot
@@ -210,211 +216,145 @@ var Core = Class({
                                         if (typeof (core.nodeInstance.onModelDeployed) === 'function') { // backward compatibility with kevoree-entities < 2.1.0
                                             core.nodeInstance.onModelDeployed();
                                         }
-                                        core.emitter.emit('deployed', core.currentModel);
+                                        core.emit('deployed');
+                                        callback();
                                     }
                                 });
                             } catch (err) {
                                 core.log.error(core.toString(), 'Deployment failed.\n'+err.stack);
-                                core.emitter.emit('deployError');
+                                core.deployModel = null;
+                                callback(err);
                             }
 
                         } else {
-                            core.emitter.emit('error', new Error("There is no instance to bootstrap on"));
+                            callback(new Error("There is no instance to bootstrap on"));
                         }
-                    });
-                } else {
-                    this.emitter.emit('error', new Error("Model is not defined or null. Deploy aborted."));
-                }
-            }
-        } else {
-            // TODO add the possibility to put new deployment in pending queue
-            this.log.warn(this.toString(), 'New deploy process requested: aborted because another one is in process (retry later?)');
-            this.emitter.emit('deployError', 'New deploy process requested: aborted because another one is in process (retry later?)');
-        }
-    },
-
-    /**
-     * Stops Kevoree Core
-     */
-    stop: function () {
-        var stopRuntime = function () {
-            // prevent event emitter leaks by unregister them
-            this.off('deployed', deployHandler);
-            this.off('adaptationError', stopRuntime);
-            this.off('error', stopRuntime);
-
-            clearInterval(this.intervalId);
-            if (this.nodeInstance === null) {
-                this.log.info(this.toString(), 'Platform stopped before bootstrapped');
-            } else {
-                this.log.info(this.toString(), "Platform stopped: "+this.nodeInstance.getName());
-            }
-
-            this.currentModel   = null;
-            this.deployModel    = null;
-            this.models         = [];
-            this.nodeName       = null;
-            this.nodeInstance   = null;
-            this.intervalId     = null;
-
-            this.emitter.emit('stopped');
-        }.bind(this);
-
-        var deployHandler = function () {
-            // prevent event emitter leaks by unregister them
-            this.off('adaptationError', stopRuntime);
-            this.off('error', stopRuntime);
-
-            // stop node
-            this.nodeInstance.stop(function (err) {
-                if (err) {
-                    this.emitter.emit('error', new Error(err.message));
-                }
-
-                stopRuntime();
-            }.bind(this));
-        }.bind(this);
-
-        if (typeof (this.intervalId) !== 'undefined' && this.intervalId !== null) {
-            var factory = new kevoree.factory.DefaultKevoreeFactory();
-            var cloner = factory.createModelCloner();
-            var stopModel = cloner.clone(this.currentModel, false);
-            var node = stopModel.findNodesByID(this.nodeName);
-            var subNodes = node.hosts.iterator();
-            while (subNodes.hasNext()) {
-                subNodes.next().delete();
-            }
-
-            var groups = node.groups.iterator();
-            while (groups.hasNext()) {
-                groups.next().delete();
-            }
-
-            var bindings = stopModel.mBindings.iterator();
-            while (bindings.hasNext()) {
-                var binding = bindings.next();
-                if (binding.port.eContainer()
-                    && binding.port.eContainer().eContainer()
-                    && binding.port.eContainer().eContainer().name === node.name) {
-                    if (binding.hub) {
-                        binding.hub.delete();
                     }
-                }
+                });
+            } else {
+                callback(new Error("Model is not defined or null. Deploy aborted."));
             }
-
-            var comps = node.components.iterator();
-            while (comps.hasNext()) {
-                comps.next().delete();
-            }
-
-            this.once('deployed', deployHandler);
-            this.once('adaptationError', stopRuntime);
-            this.once('error', stopRuntime);
-
-            this.stopping = true;
-            this.deploy(stopModel);
-        } else {
-            stopRuntime();
-            this.emitter.emit('stopped');
         }
-    },
-
-    checkBootstrapNode: function (model, callback) {
-        callback = callback || function () { console.warn('No callback defined for checkBootstrapNode(model, cb) in KevoreeCore'); };
-
-        if (typeof (this.nodeInstance) === 'undefined' || this.nodeInstance === null) {
-            this.log.debug(this.toString(), "Start '"+this.nodeName+"' bootstrapping...");
-            this.bootstrapper.bootstrapNodeType(this.nodeName, model, function (err, AbstractNode) {
-                if (err) {
-                    callback(err);
-                    return;
-                }
-
-                var node = model.findNodesByID(this.nodeName);
-
-                this.nodeInstance = new AbstractNode();
-                this.nodeInstance.setKevoreeCore(this);
-                this.nodeInstance.setName(this.nodeName);
-                this.nodeInstance.setPath(node.path());
-
-                callback();
-            }.bind(this));
-
-        } else {
-            callback();
-        }
-    },
-
-    setBootstrapper: function (bootstrapper) {
-        this.bootstrapper = bootstrapper;
-    },
-
-    getBootstrapper: function () {
-        return this.bootstrapper;
-    },
-
-    getCurrentModel: function () {
-        return this.currentModel;
-    },
-
-    /**
-     * Returns deployModel or currentModel if not deploying
-     * @returns {Object}
-     */
-    getLastModel: function () {
-        if (typeof this.deployModel !== 'undefined' && this.deployModel !== null) {
-            return this.deployModel;
-        } else {
-            return this.currentModel;
-        }
-    },
-
-    getPreviousModel: function () {
-        var model = null;
-        if (this.models.length > 0) model = this.models[this.models.length-1];
-        return model;
-    },
-
-    getPreviousModels: function () {
-        return this.models;
-    },
-
-    getModulesPath: function () {
-        return this.modulesPath;
-    },
-
-    getDeployModel: function () {
-        return this.deployModel;
-    },
-
-    getNodeName: function () {
-        return this.nodeName;
-    },
-
-    getLogger: function () {
-        return this.log;
-    },
-
-    on: function (event, callback) {
-        this.emitter.addListener(event, callback);
-    },
-
-    off: function (event, callback) {
-        this.emitter.removeListener(event, callback);
-    },
-
-    once: function (event, callback) {
-        this.emitter.once(event, callback);
+    } else {
+        // TODO add the possibility to put new deployment in pending queue
+        this.log.warn(this.toString(), 'New deploy process requested: aborted because another one is in process (retry later?)');
+        callback(new Error('New deploy process requested: aborted because another one is in process (retry later?)'));
     }
-});
-
-// utility function to ensure cached model list won't go over 10 models
-var pushInArray = function pushInArray(array, model) {
-    if (array.length === 10) {
-        array.shift();
-    }
-    array.push(model);
 };
 
-// Exports
-module.exports = Core;
+/**
+ *
+ * @param model
+ * @param callback
+ */
+KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
+    callback = callback || function () { console.warn('No callback defined for checkBootstrapNode(model, cb) in KevoreeCore'); };
+
+    if (typeof (this.nodeInstance) === 'undefined' || this.nodeInstance === null) {
+        this.log.debug(this.toString(), "Start '"+this.nodeName+"' bootstrapping...");
+        this.bootstrapper.bootstrapNodeType(this.nodeName, model, function (err, AbstractNode) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            var node = model.findNodesByID(this.nodeName);
+
+            this.nodeInstance = new AbstractNode();
+            this.nodeInstance.setKevoreeCore(this);
+            this.nodeInstance.setName(this.nodeName);
+            this.nodeInstance.setPath(node.path());
+
+            callback();
+        }.bind(this));
+
+    } else {
+        callback();
+    }
+};
+
+/**
+ *
+ * @returns {string}
+ */
+KevoreeCore.prototype.toString = function () {
+    return 'KevoreeCore';
+};
+
+/**
+ *
+ * @returns {null|*}
+ */
+KevoreeCore.prototype.getBootstrapper = function () {
+    return this.bootstrapper;
+};
+
+/**
+ *
+ * @param bootstrapper
+ */
+KevoreeCore.prototype.setBootstrapper = function (bootstrapper) {
+    this.bootstrapper = bootstrapper;
+};
+
+/**
+ *
+ * @returns {string}
+ */
+KevoreeCore.prototype.getModulesPath = function () {
+    return this.modulesPath;
+};
+
+/**
+ *
+ * @returns {null|*}
+ */
+KevoreeCore.prototype.getCurrentModel = function () {
+    return this.currentModel;
+};
+
+/**
+ *
+ * @returns {null|*}
+ */
+KevoreeCore.prototype.getLastModel = function () {
+    if (typeof this.deployModel !== 'undefined' && this.deployModel !== null) {
+        return this.deployModel;
+    } else {
+        return this.currentModel;
+    }
+};
+
+/**
+ *
+ * @returns {null|*}
+ */
+KevoreeCore.prototype.getDeployModel = function () {
+    return this.deployModel;
+};
+
+/**
+ *
+ * @returns {null|*|string}
+ */
+KevoreeCore.prototype.getNodeName = function () {
+    return this.nodeName;
+};
+
+/**
+ *
+ * @returns {*}
+ */
+KevoreeCore.prototype.getLogger = function () {
+    return this.log;
+};
+
+KevoreeCore.prototype.off = function (event, listener) {
+    this.removeListener(event, listener);
+};
+
+/**
+ *
+ * @type {KevoreeCore}
+ */
+module.exports = KevoreeCore;
