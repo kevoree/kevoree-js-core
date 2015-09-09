@@ -173,7 +173,6 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                 // rollbackCommand: function that calls undo() on cmds in the stack
                                 function rollbackCommand(cmd, iteratorCallback) {
                                     try {
-                                        console.log('rollback cmd', cmd.toString());
                                         cmd.undo(iteratorCallback);
                                     } catch (err) {
                                         iteratorCallback(err);

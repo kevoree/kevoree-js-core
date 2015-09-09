@@ -1,6 +1,6 @@
 {
   "name": "kevoree-core",
-  "version": "8.0.0-alpha",
+  "version": "8.0.0",
   "description": "Kevoree Javascript platform core",
   "author": "Maxime Tricoire <max.tricoire@gmail.com>",
   "main": "./kevoree-core.js",

@@ -174,7 +174,6 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                 // rollbackCommand: function that calls undo() on cmds in the stack
                                 function rollbackCommand(cmd, iteratorCallback) {
                                     try {
-                                        console.log('rollback cmd', cmd.toString());
                                         cmd.undo(iteratorCallback);
                                     } catch (err) {
                                         iteratorCallback(err);
@@ -426,6 +425,12 @@ module.exports = KevoreeCore;
         return _toString.call(obj) === '[object Array]';
     };
 
+    // Ported from underscore.js isObject
+    var _isObject = function(obj) {
+        var type = typeof obj;
+        return type === 'function' || type === 'object' && !!obj;
+    };
+
     function _isArrayLike(arr) {
         return _isArray(arr) || (
             // has a positive integer length property
@@ -529,7 +534,6 @@ module.exports = KevoreeCore;
             switch (startIndex) {
                 case 0: return func.call(this, rest);
                 case 1: return func.call(this, arguments[0], rest);
-                case 2: return func.call(this, arguments[0], arguments[1], rest);
             }
             // Currently unused but handle cases outside of the switch statement:
             // var args = Array(startIndex + 1);
@@ -826,6 +830,7 @@ module.exports = KevoreeCore;
     }
     async.detect = _createTester(async.eachOf, identity, _findGetResult);
     async.detectSeries = _createTester(async.eachOfSeries, identity, _findGetResult);
+    async.detectLimit = _createTester(async.eachOfLimit, identity, _findGetResult);
 
     async.sortBy = function (arr, iterator, callback) {
         async.map(arr, function (x, callback) {
@@ -957,7 +962,7 @@ module.exports = KevoreeCore;
                 acc.times = parseInt(t.times, 10) || DEFAULT_TIMES;
                 acc.interval = parseInt(t.interval, 10) || DEFAULT_INTERVAL;
             } else {
-                throw new Error('Unsupported argument type for \'times\': ' + typeof(t));
+                throw new Error('Unsupported argument type for \'times\': ' + typeof t);
             }
         }
 
@@ -1377,7 +1382,7 @@ module.exports = KevoreeCore;
     function _console_fn(name) {
         return _restParam(function (fn, args) {
             fn.apply(null, args.concat([_restParam(function (err, args) {
-                if (typeof console !== 'undefined') {
+                if (typeof console === 'object') {
                     if (err) {
                         if (console.error) {
                             console.error(err);
@@ -1550,10 +1555,10 @@ module.exports = KevoreeCore;
                 return callback(e);
             }
             // if result is Promise object
-            if (typeof result !== 'undefined' && typeof result.then === "function") {
+            if (_isObject(result) && typeof result.then === "function") {
                 result.then(function(value) {
                     callback(null, value);
-                }).catch(function(err) {
+                })["catch"](function(err) {
                     callback(err.message ? err : new Error(err));
                 });
             } else {
@@ -1563,11 +1568,11 @@ module.exports = KevoreeCore;
     };
 
     // Node.js
-    if (typeof module !== 'undefined' && module.exports) {
+    if (typeof module === 'object' && module.exports) {
         module.exports = async;
     }
     // AMD / RequireJS
-    else if (typeof define !== 'undefined' && define.amd) {
+    else if (typeof define === 'function' && define.amd) {
         define([], function () {
             return async;
         });
@@ -1941,7 +1946,9 @@ function drainQueue() {
         currentQueue = queue;
         queue = [];
         while (++queueIndex < len) {
-            currentQueue[queueIndex].run();
+            if (currentQueue) {
+                currentQueue[queueIndex].run();
+            }
         }
         queueIndex = -1;
         len = queue.length;
@@ -1993,7 +2000,6 @@ process.binding = function (name) {
     throw new Error('process.binding is not supported');
 };
 
-// TODO(shtylman)
 process.cwd = function () { return '/' };
 process.chdir = function (dir) {
     throw new Error('process.chdir is not supported');
