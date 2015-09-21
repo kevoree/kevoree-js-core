@@ -13,7 +13,7 @@ var NAME_PATTERN = /^[\w-]+$/;
  * @constructor
  */
 function KevoreeCore(modulesPath, logger) {
-    this.log = (logger != undefined) ? logger : new KevoreeLogger(this.toString());
+    this.log = (logger !== undefined) ? logger : new KevoreeLogger(this.toString());
 
     this.stopping       = false;
     this.currentModel   = null;
@@ -86,9 +86,9 @@ KevoreeCore.prototype.stop = function () {
     var bindings = stopModel.mBindings.iterator();
     while (bindings.hasNext()) {
         var binding = bindings.next();
-        if (binding.port.eContainer()
-            && binding.port.eContainer().eContainer()
-            && binding.port.eContainer().eContainer().name === node.name) {
+        if (binding.port.eContainer() &&
+            binding.port.eContainer().eContainer() &&
+            binding.port.eContainer().eContainer().name === node.name) {
             if (binding.hub) {
                 binding.hub.delete();
             }
@@ -150,7 +150,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                 var cmdStack = [];
 
                                 // executeCommand: function that save cmd to stack and executes it
-                                function executeCommand(cmd, iteratorCallback) {
+                                var executeCommand = function (cmd, iteratorCallback) {
                                     // save the cmd to be processed in a stack using unshift
                                     // in order to add the last processed cmd at the beginning of the array
                                     // => cmdStack[0] = more recently executed cmd
@@ -168,16 +168,16 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                         }
                                         iteratorCallback(err);
                                     });
-                                }
+                                };
 
                                 // rollbackCommand: function that calls undo() on cmds in the stack
-                                function rollbackCommand(cmd, iteratorCallback) {
+                                var rollbackCommand = function (cmd, iteratorCallback) {
                                     try {
                                         cmd.undo(iteratorCallback);
                                     } catch (err) {
                                         iteratorCallback(err);
                                     }
-                                }
+                                };
 
                                 // execute each command synchronously
                                 async.eachSeries(adaptations, executeCommand, function (err) {
@@ -200,6 +200,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                                 // rollback succeed
                                                 core.log.info(core.toString(), 'Rollback succeed: '+cmdStack.length+' adaptations ('+(new Date().getTime() - start)+'ms)');
                                                 core.deployModel = null;
+                                                core.emit('rollbackSucceed');
                                                 callback();
                                             }
                                         });
@@ -219,10 +220,10 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                         callback();
                                     }
                                 });
-                            } catch (err) {
-                                core.log.error(core.toString(), 'Deployment failed.\n'+err.stack);
+                            } catch (e) {
+                                core.log.error(core.toString(), 'Deployment failed.\n'+e.stack);
                                 core.deployModel = null;
-                                callback(err);
+                                callback(e);
                             }
 
                         } else {
