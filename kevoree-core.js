@@ -22,6 +22,7 @@ function KevoreeCore(modulesPath, logger) {
     this.nodeInstance   = null;
     this.modulesPath    = modulesPath;
     this.bootstrapper   = null;
+    this.firstBoot      = true;
 
     this.emitter = new EventEmitter();
 }
@@ -184,26 +185,33 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                     if (err) {
                                         err.message = "Something went wrong while processing adaptations.\n"+err.message;
                                         core.log.error(core.toString(), err.stack);
-                                        core.log.info(core.toString(), 'Rollbacking to previous model...');
+                                        if (core.firstBoot) {
+                                            core.log.warn(core.toString(), 'Shutting down Kevoree because first deployment failed...');
+                                            core.deployModel = null;
+                                            core.stop();
+                                            callback(err);
+                                        } else {
+                                            core.log.info(core.toString(), 'Rollbacking to previous model...');
 
-                                        // rollback process
-                                        async.eachSeries(cmdStack, rollbackCommand, function (err) {
-                                            if (err) {
-                                                // something went wrong while rollbacking
-                                                err.message = "Something went wrong while rollbacking. Process will exit.\n"+err.message;
-                                                core.log.error(core.toString(), err.stack);
-                                                // stop everything :/
-                                                core.deployModel = null;
-                                                core.stop();
-                                                callback(err);
-                                            } else {
-                                                // rollback succeed
-                                                core.log.info(core.toString(), 'Rollback succeed: '+cmdStack.length+' adaptations ('+(new Date().getTime() - start)+'ms)');
-                                                core.deployModel = null;
-                                                core.emit('rollbackSucceed');
-                                                callback();
-                                            }
-                                        });
+                                            // rollback process
+                                            async.eachSeries(cmdStack, rollbackCommand, function (err) {
+                                                if (err) {
+                                                    // something went wrong while rollbacking
+                                                    err.message = "Something went wrong while rollbacking. Process will exit.\n"+err.message;
+                                                    core.log.error(core.toString(), err.stack);
+                                                    // stop everything :/
+                                                    core.deployModel = null;
+                                                    core.stop();
+                                                    callback(err);
+                                                } else {
+                                                    // rollback succeed
+                                                    core.log.info(core.toString(), 'Rollback succeed: '+cmdStack.length+' adaptations ('+(new Date().getTime() - start)+'ms)');
+                                                    core.deployModel = null;
+                                                    core.emit('rollbackSucceed');
+                                                    callback();
+                                                }
+                                            });
+                                        }
 
                                     } else {
                                         // set current model
@@ -217,6 +225,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                             core.nodeInstance.onModelDeployed();
                                         }
                                         core.emit('deployed');
+                                        core.firstBoot = false;
                                         callback();
                                     }
                                 });
