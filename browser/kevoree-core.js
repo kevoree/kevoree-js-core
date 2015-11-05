@@ -1,9 +1,9 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.KevoreeCore = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-var kevoree       = require('kevoree-library'),
+var kevoree = require('kevoree-library'),
     KevoreeLogger = require('kevoree-commons').KevoreeLogger,
-    async         = require('async'),
-    util          = require('util'),
-    EventEmitter  = require('events').EventEmitter;
+    async = require('async'),
+    util = require('util'),
+    EventEmitter = require('events').EventEmitter;
 
 var NAME_PATTERN = /^[\w-]+$/;
 
@@ -16,14 +16,15 @@ var NAME_PATTERN = /^[\w-]+$/;
 function KevoreeCore(modulesPath, logger) {
     this.log = (logger !== undefined) ? logger : new KevoreeLogger(this.toString());
 
-    this.stopping       = false;
-    this.currentModel   = null;
-    this.deployModel    = null;
-    this.nodeName       = null;
-    this.nodeInstance   = null;
-    this.modulesPath    = modulesPath;
-    this.bootstrapper   = null;
-    this.firstBoot      = true;
+    this.stopping = false;
+    this.currentModel = null;
+    this.deployModel = null;
+    this.nodeName = null;
+    this.nodeInstance = null;
+    this.modulesPath = modulesPath;
+    this.bootstrapper = null;
+    this.firstBoot = true;
+    this.scriptQueue = [];
 
     this.emitter = new EventEmitter();
 }
@@ -34,7 +35,7 @@ util.inherits(KevoreeCore, EventEmitter);
  *
  * @param nodeName
  */
-KevoreeCore.prototype.start = function (nodeName) {
+KevoreeCore.prototype.start = function(nodeName) {
     if (!nodeName || nodeName.length === 0) {
         nodeName = "node0";
     }
@@ -53,23 +54,23 @@ KevoreeCore.prototype.start = function (nodeName) {
         // add platform node
         this.currentModel.addNodes(node);
 
-        var id = setInterval(function () {}, 10e10);
+        var id = setInterval(function() {}, 10e10);
         // hang-on until the core is stopped
-        this.emitter.on('stopped', function () {
+        this.emitter.on('stopped', function() {
             clearInterval(id);
             this.emit('stopped');
         }.bind(this));
 
-        this.log.info(this.toString(), "Platform node name: "+nodeName);
+        this.log.info(this.toString(), "Platform node name: " + nodeName);
     } else {
-        throw new Error('Platform node name must match this regex '+NAME_PATTERN.toString());
+        throw new Error('Platform node name must match this regex ' + NAME_PATTERN.toString());
     }
 };
 
 /**
  *
  */
-KevoreeCore.prototype.stop = function () {
+KevoreeCore.prototype.stop = function() {
     var factory = new kevoree.factory.DefaultKevoreeFactory();
     var cloner = factory.createModelCloner();
     var stopModel = cloner.clone(this.currentModel, false);
@@ -103,12 +104,12 @@ KevoreeCore.prototype.stop = function () {
     }
 
     this.stopping = true;
-    this.deploy(stopModel, function () {
+    this.deploy(stopModel, function() {
         if (this.nodeInstance === null) {
             this.log.info(this.toString(), 'Platform stopped before bootstrapped');
             this.emitter.emit('stopped');
         } else {
-            this.log.info(this.toString(), "Platform stopped: "+this.nodeInstance.getName());
+            this.log.info(this.toString(), "Platform stopped: " + this.nodeInstance.getName());
             this.emitter.emit('stopped');
         }
     }.bind(this));
@@ -119,12 +120,12 @@ KevoreeCore.prototype.stop = function () {
  * @param model
  * @param callback
  */
-KevoreeCore.prototype.deploy = function (model, callback) {
+KevoreeCore.prototype.deploy = function(model, callback) {
     callback = callback || function deployNoopCallback() {};
     if (!this.deployModel) {
         this.emit('deploying', model);
         if (model && !model.findNodesByID(this.nodeName)) {
-            callback(new Error('Deploy model failure: unable to find '+this.nodeName+' in given model'));
+            callback(new Error('Deploy model failure: unable to find ' + this.nodeName + ' in given model'));
         } else {
             this.log.debug(this.toString(), 'Deploy process started...');
             var start = new Date().getTime();
@@ -132,7 +133,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                 // check if there is an instance currently running
                 // if not, it will try to run it
                 var core = this;
-                this.checkBootstrapNode(model, function (err) {
+                this.checkBootstrapNode(model, function(err) {
                     if (err) {
                         callback(err);
                     } else {
@@ -152,18 +153,18 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                 var cmdStack = [];
 
                                 // executeCommand: function that save cmd to stack and executes it
-                                var executeCommand = function (cmd, iteratorCallback) {
+                                var executeCommand = function(cmd, iteratorCallback) {
                                     // save the cmd to be processed in a stack using unshift
                                     // in order to add the last processed cmd at the beginning of the array
                                     // => cmdStack[0] = more recently executed cmd
                                     cmdStack.unshift(cmd);
 
                                     // execute cmd
-                                    cmd.execute(function (err) {
+                                    cmd.execute(function(err) {
                                         if (err) {
                                             if (core.stopping) {
                                                 // log error
-                                                core.log.error(cmd.toString(), 'Fail adaptation skipped: '+err.message);
+                                                core.log.error(cmd.toString(), 'Fail adaptation skipped: ' + err.message);
                                                 // but continue adaptation because we are stopping runtime anyway
                                                 err = null;
                                             }
@@ -173,7 +174,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                 };
 
                                 // rollbackCommand: function that calls undo() on cmds in the stack
-                                var rollbackCommand = function (cmd, iteratorCallback) {
+                                var rollbackCommand = function(cmd, iteratorCallback) {
                                     try {
                                         cmd.undo(iteratorCallback);
                                     } catch (err) {
@@ -182,9 +183,9 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                 };
 
                                 // execute each command synchronously
-                                async.eachSeries(adaptations, executeCommand, function (err) {
+                                async.eachSeries(adaptations, executeCommand, function(err) {
                                     if (err) {
-                                        err.message = "Something went wrong while processing adaptations.\n"+err.message;
+                                        err.message = "Something went wrong while processing adaptations.\n" + err.message;
                                         core.log.error(core.toString(), err.stack);
                                         if (core.firstBoot) {
                                             core.log.warn(core.toString(), 'Shutting down Kevoree because first deployment failed...');
@@ -195,10 +196,10 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                             core.log.info(core.toString(), 'Rollbacking to previous model...');
 
                                             // rollback process
-                                            async.eachSeries(cmdStack, rollbackCommand, function (err) {
+                                            async.eachSeries(cmdStack, rollbackCommand, function(err) {
                                                 if (err) {
                                                     // something went wrong while rollbacking
-                                                    err.message = "Something went wrong while rollbacking. Process will exit.\n"+err.message;
+                                                    err.message = "Something went wrong while rollbacking. Process will exit.\n" + err.message;
                                                     core.log.error(core.toString(), err.stack);
                                                     // stop everything :/
                                                     core.deployModel = null;
@@ -206,7 +207,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                                     callback(err);
                                                 } else {
                                                     // rollback succeed
-                                                    core.log.info(core.toString(), 'Rollback succeed: '+cmdStack.length+' adaptations ('+(new Date().getTime() - start)+'ms)');
+                                                    core.log.info(core.toString(), 'Rollback succeed: ' + cmdStack.length + ' adaptations (' + (new Date().getTime() - start) + 'ms)');
                                                     core.deployModel = null;
                                                     core.emit('rollbackSucceed');
                                                     callback();
@@ -220,18 +221,18 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                                         // reset deployModel
                                         core.deployModel = null;
                                         // adaptations succeed : woot
-                                        core.log.info(core.toString(), 'Model deployed successfully: '+adaptations.length+' adaptations ('+(new Date().getTime() - start)+'ms)');
+                                        core.log.info(core.toString(), 'Model deployed successfully: ' + adaptations.length + ' adaptations (' + (new Date().getTime() - start) + 'ms)');
                                         // all good :)
-                                        if (typeof (core.nodeInstance.onModelDeployed) === 'function') { // backward compatibility with kevoree-entities < 2.1.0
-                                            core.nodeInstance.onModelDeployed();
-                                        }
+                                        // process script queue if anyway
+                                        core.processScriptQueue();
+
                                         core.emit('deployed');
                                         core.firstBoot = false;
                                         callback();
                                     }
                                 });
                             } catch (e) {
-                                core.log.error(core.toString(), 'Deployment failed.\n'+e.stack);
+                                core.log.error(core.toString(), 'Deployment failed.\n' + e.stack);
                                 core.deployModel = null;
                                 callback(e);
                             }
@@ -252,17 +253,115 @@ KevoreeCore.prototype.deploy = function (model, callback) {
     }
 };
 
+KevoreeCore.prototype.submitScript = function(script, callback) {
+    if (typeof callback !== 'function') {
+        callback = function() {};
+    }
+
+    if (this.deployModel === null) {
+        // not in "deploying state"
+        var kevs = new KevScript();
+        kevs.parse(script, this.currentModel, function(err, model) {
+            if (err) {
+                var e = new Error('KevScript submission failed (' + err.message + ')');
+                callback(e);
+                return;
+            }
+
+            var deployHandler, errHandler, adaptHandler;
+            deployHandler = function() {
+                this.off('error', errHandler);
+                this.off('adaptationError', adaptHandler);
+                callback();
+            }.bind(this);
+            errHandler = function(err) {
+                this.off('deployed', deployHandler);
+                this.off('adaptationError', adaptHandler);
+                var e = new Error('KevScript submission failed (' + err.message + ')');
+                callback(e);
+            }.bind(this);
+            adaptHandler = function(err) {
+                this.off('error', errHandler);
+                this.off('deployed', deployHandler);
+                var e = new Error('KevScript submission failed (' + err.message + ')');
+                callback(e);
+            }.bind(this);
+
+            this.once('deployed', deployHandler);
+            this.once('error', errHandler);
+            this.once('adaptationError', adaptHandler);
+
+            this.kCore.deploy(model);
+        }.bind(this));
+    } else {
+        // in "deploying state" => need to queue request to process it afterwards
+        this.scriptQueue.push({
+            script: script,
+            callback: callback
+        });
+        this.log.debug(this.toString(), 'Script added to queue at position ' + this.scriptQueue.length - 1);
+    }
+};
+
+KevoreeCore.prototype.processScriptQueue = function() {
+    if (this.scriptQueue.length > 0) {
+        // create a KevScript engine
+        var kevs = new KevScript();
+        // retrieve first queued script
+        var item = this.scriptQueue[0];
+        // remove first queued script from the queue
+        this.scriptQueue.splice(0, 1);
+        // execute first queued script
+        kevs.parse(item.script, this.currentModel, function(err, model) {
+            if (err) {
+                // queued script submission failed
+                var e = new Error('KevScript submission failed (' + err.message + ')');
+                item.callback(e);
+
+            } else {
+                // queued script submission succeed
+                var deployHandler, errHandler, adaptHandler;
+                deployHandler = function() {
+                    this.off('error', errHandler);
+                    this.off('adaptationError', adaptHandler);
+                    item.callback();
+                }.bind(this);
+                errHandler = function(err) {
+                    this.off('deployed', deployHandler);
+                    this.off('adaptationError', adaptHandler);
+                    var e = new Error('KevScript submission failed (' + err.message + ')');
+                    item.callback(e);
+                }.bind(this);
+                adaptHandler = function(err) {
+                    this.off('error', errHandler);
+                    this.off('deployed', deployHandler);
+                    var e = new Error('KevScript submission failed (' + err.message + ')');
+                    item.callback(e);
+                }.bind(this);
+
+                this.once('deployed', deployHandler);
+                this.once('error', errHandler);
+                this.once('adaptationError', adaptHandler);
+
+                this.deploy(model);
+            }
+        }.bind(this));
+    }
+};
+
 /**
  *
  * @param model
  * @param callback
  */
-KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
-    callback = callback || function () { console.warn('No callback defined for checkBootstrapNode(model, cb) in KevoreeCore'); };
+KevoreeCore.prototype.checkBootstrapNode = function(model, callback) {
+    callback = callback || function() {
+        console.warn('No callback defined for checkBootstrapNode(model, cb) in KevoreeCore');
+    };
 
-    if (typeof (this.nodeInstance) === 'undefined' || this.nodeInstance === null) {
-        this.log.debug(this.toString(), "Start '"+this.nodeName+"' bootstrapping...");
-        this.bootstrapper.bootstrapNodeType(this.nodeName, model, function (err, AbstractNode) {
+    if (typeof(this.nodeInstance) === 'undefined' || this.nodeInstance === null) {
+        this.log.debug(this.toString(), "Start '" + this.nodeName + "' bootstrapping...");
+        this.bootstrapper.bootstrapNodeType(this.nodeName, model, function(err, AbstractNode) {
             if (err) {
                 callback(err);
                 return;
@@ -287,7 +386,7 @@ KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
  *
  * @returns {string}
  */
-KevoreeCore.prototype.toString = function () {
+KevoreeCore.prototype.toString = function() {
     return 'KevoreeCore';
 };
 
@@ -295,7 +394,7 @@ KevoreeCore.prototype.toString = function () {
  *
  * @returns {null|*}
  */
-KevoreeCore.prototype.getBootstrapper = function () {
+KevoreeCore.prototype.getBootstrapper = function() {
     return this.bootstrapper;
 };
 
@@ -303,7 +402,7 @@ KevoreeCore.prototype.getBootstrapper = function () {
  *
  * @param bootstrapper
  */
-KevoreeCore.prototype.setBootstrapper = function (bootstrapper) {
+KevoreeCore.prototype.setBootstrapper = function(bootstrapper) {
     this.bootstrapper = bootstrapper;
 };
 
@@ -311,7 +410,7 @@ KevoreeCore.prototype.setBootstrapper = function (bootstrapper) {
  *
  * @returns {string}
  */
-KevoreeCore.prototype.getModulesPath = function () {
+KevoreeCore.prototype.getModulesPath = function() {
     return this.modulesPath;
 };
 
@@ -319,7 +418,7 @@ KevoreeCore.prototype.getModulesPath = function () {
  *
  * @returns {null|*}
  */
-KevoreeCore.prototype.getCurrentModel = function () {
+KevoreeCore.prototype.getCurrentModel = function() {
     return this.currentModel;
 };
 
@@ -327,7 +426,7 @@ KevoreeCore.prototype.getCurrentModel = function () {
  *
  * @returns {null|*}
  */
-KevoreeCore.prototype.getLastModel = function () {
+KevoreeCore.prototype.getLastModel = function() {
     if (typeof this.deployModel !== 'undefined' && this.deployModel !== null) {
         return this.deployModel;
     } else {
@@ -339,7 +438,7 @@ KevoreeCore.prototype.getLastModel = function () {
  *
  * @returns {null|*}
  */
-KevoreeCore.prototype.getDeployModel = function () {
+KevoreeCore.prototype.getDeployModel = function() {
     return this.deployModel;
 };
 
@@ -347,7 +446,7 @@ KevoreeCore.prototype.getDeployModel = function () {
  *
  * @returns {null|*|string}
  */
-KevoreeCore.prototype.getNodeName = function () {
+KevoreeCore.prototype.getNodeName = function() {
     return this.nodeName;
 };
 
@@ -355,11 +454,11 @@ KevoreeCore.prototype.getNodeName = function () {
  *
  * @returns {*}
  */
-KevoreeCore.prototype.getLogger = function () {
+KevoreeCore.prototype.getLogger = function() {
     return this.log;
 };
 
-KevoreeCore.prototype.off = function (event, listener) {
+KevoreeCore.prototype.off = function(event, listener) {
     this.removeListener(event, listener);
 };
 
@@ -369,7 +468,47 @@ KevoreeCore.prototype.off = function (event, listener) {
  */
 module.exports = KevoreeCore;
 
-},{"async":2,"events":3,"kevoree-commons":8,"kevoree-library":18,"util":7}],2:[function(require,module,exports){
+},{"async":3,"events":5,"kevoree-commons":8,"kevoree-library":15,"util":20}],2:[function(require,module,exports){
+'use strict';
+var styles = module.exports;
+
+var codes = {
+	reset: [0, 0],
+
+	bold: [1, 22],
+	italic: [3, 23],
+	underline: [4, 24],
+	inverse: [7, 27],
+	strikethrough: [9, 29],
+
+	black: [30, 39],
+	red: [31, 39],
+	green: [32, 39],
+	yellow: [33, 39],
+	blue: [34, 39],
+	magenta: [35, 39],
+	cyan: [36, 39],
+	white: [37, 39],
+	gray: [90, 39],
+
+	bgBlack: [40, 49],
+	bgRed: [41, 49],
+	bgGreen: [42, 49],
+	bgYellow: [43, 49],
+	bgBlue: [44, 49],
+	bgMagenta: [45, 49],
+	bgCyan: [46, 49],
+	bgWhite: [47, 49]
+};
+
+Object.keys(codes).forEach(function (key) {
+	var val = codes[key];
+	var style = styles[key] = {};
+	style.open = '\x1b[' + val[0] + 'm';
+	style.close = '\x1b[' + val[1] + 'm';
+});
+
+},{}],3:[function(require,module,exports){
 (function (process,global){
 /*!
  * async
@@ -448,12 +587,6 @@ module.exports = KevoreeCore;
             arr.length >= 0 &&
             arr.length % 1 === 0
         );
-    }
-
-    function _each(coll, iterator) {
-        return _isArrayLike(coll) ?
-            _arrayEach(coll, iterator) :
-            _forEachOf(coll, iterator);
     }
 
     function _arrayEach(arr, iterator) {
@@ -603,23 +736,26 @@ module.exports = KevoreeCore;
     async.eachOf = function (object, iterator, callback) {
         callback = _once(callback || noop);
         object = object || [];
-        var size = _isArrayLike(object) ? object.length : _keys(object).length;
-        var completed = 0;
-        if (!size) {
-            return callback(null);
-        }
-        _each(object, function (value, key) {
+
+        var iter = _keyIterator(object);
+        var key, completed = 0;
+
+        while ((key = iter()) != null) {
+            completed += 1;
             iterator(object[key], key, only_once(done));
-        });
+        }
+
+        if (completed === 0) callback(null);
+
         function done(err) {
+            completed--;
             if (err) {
                 callback(err);
             }
-            else {
-                completed += 1;
-                if (completed >= size) {
-                    callback(null);
-                }
+            // Check key is null in case iterator isn't exhausted
+            // and done resolved synchronously.
+            else if (key === null && completed <= 0) {
+                callback(null);
             }
         }
     };
@@ -645,7 +781,7 @@ module.exports = KevoreeCore;
                         return callback(null);
                     } else {
                         if (sync) {
-                            async.nextTick(iterate);
+                            async.setImmediate(iterate);
                         } else {
                             iterate();
                         }
@@ -726,7 +862,8 @@ module.exports = KevoreeCore;
 
     function _asyncMap(eachfn, arr, iterator, callback) {
         callback = _once(callback || noop);
-        var results = [];
+        arr = arr || [];
+        var results = _isArrayLike(arr) ? [] : {};
         eachfn(arr, function (value, index, callback) {
             iterator(value, function (err, v) {
                 results[index] = v;
@@ -752,7 +889,7 @@ module.exports = KevoreeCore;
                 callback(err);
             });
         }, function (err) {
-            callback(err || null, memo);
+            callback(err, memo);
         });
     };
 
@@ -760,6 +897,20 @@ module.exports = KevoreeCore;
     async.reduceRight = function (arr, memo, iterator, callback) {
         var reversed = _map(arr, identity).reverse();
         async.reduce(reversed, memo, iterator, callback);
+    };
+
+    async.transform = function (arr, memo, iterator, callback) {
+        if (arguments.length === 3) {
+            callback = iterator;
+            iterator = memo;
+            memo = _isArray(arr) ? [] : {};
+        }
+
+        async.eachOf(arr, function(v, k, cb) {
+            iterator(memo, v, k, cb);
+        }, function(err) {
+            callback(err, memo);
+        });
     };
 
     function _filter(eachfn, arr, iterator, callback) {
@@ -870,15 +1021,24 @@ module.exports = KevoreeCore;
         }
     };
 
-    async.auto = function (tasks, callback) {
+    async.auto = function (tasks, concurrency, callback) {
+        if (!callback) {
+            // concurrency is optional, shift the args.
+            callback = concurrency;
+            concurrency = null;
+        }
         callback = _once(callback || noop);
         var keys = _keys(tasks);
         var remainingTasks = keys.length;
         if (!remainingTasks) {
             return callback(null);
         }
+        if (!concurrency) {
+            concurrency = remainingTasks;
+        }
 
         var results = {};
+        var runningTasks = 0;
 
         var listeners = [];
         function addListener(fn) {
@@ -904,6 +1064,7 @@ module.exports = KevoreeCore;
         _arrayEach(keys, function (k) {
             var task = _isArray(tasks[k]) ? tasks[k]: [tasks[k]];
             var taskCallback = _restParam(function(err, args) {
+                runningTasks--;
                 if (args.length <= 1) {
                     args = args[0];
                 }
@@ -933,11 +1094,12 @@ module.exports = KevoreeCore;
                 }
             }
             function ready() {
-                return _reduce(requires, function (a, x) {
+                return runningTasks < concurrency && _reduce(requires, function (a, x) {
                     return (a && results.hasOwnProperty(x));
                 }, true) && !results.hasOwnProperty(k);
             }
             if (ready()) {
+                runningTasks++;
                 task[task.length - 1](taskCallback, results);
             }
             else {
@@ -945,6 +1107,7 @@ module.exports = KevoreeCore;
             }
             function listener() {
                 if (ready()) {
+                    runningTasks++;
                     removeListener(listener);
                     task[task.length - 1](taskCallback, results);
                 }
@@ -1236,8 +1399,17 @@ module.exports = KevoreeCore;
         function _next(q, tasks) {
             return function(){
                 workers -= 1;
+
+                var removed = false;
                 var args = arguments;
                 _arrayEach(tasks, function (task) {
+                    _arrayEach(workersList, function (worker, index) {
+                        if (worker === task && !removed) {
+                            workersList.splice(index, 1);
+                            removed = true;
+                        }
+                    });
+
                     task.callback.apply(task, args);
                 });
                 if (q.tasks.length + workers === 0) {
@@ -1248,6 +1420,7 @@ module.exports = KevoreeCore;
         }
 
         var workers = 0;
+        var workersList = [];
         var q = {
             tasks: [],
             concurrency: concurrency,
@@ -1282,6 +1455,7 @@ module.exports = KevoreeCore;
                             q.empty();
                         }
                         workers += 1;
+                        workersList.push(tasks[0]);
                         var cb = only_once(_next(q, tasks));
                         worker(data, cb);
                     }
@@ -1292,6 +1466,9 @@ module.exports = KevoreeCore;
             },
             running: function () {
                 return workers;
+            },
+            workersList: function () {
+                return workersList;
             },
             idle: function() {
                 return q.tasks.length + workers === 0;
@@ -1421,7 +1598,7 @@ module.exports = KevoreeCore;
             var callback = args.pop();
             var key = hasher.apply(null, args);
             if (key in memo) {
-                async.nextTick(function () {
+                async.setImmediate(function () {
                     callback.apply(null, memo[key]);
                 });
             }
@@ -1595,7 +1772,72 @@ module.exports = KevoreeCore;
 }());
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"_process":5}],3:[function(require,module,exports){
+},{"_process":16}],4:[function(require,module,exports){
+'use strict';
+var ansi = require('ansi-styles');
+var stripAnsi = require('strip-ansi');
+var hasColor = require('has-color');
+var defineProps = Object.defineProperties;
+var chalk = module.exports;
+
+var styles = (function () {
+	var ret = {};
+
+	ansi.grey = ansi.gray;
+
+	Object.keys(ansi).forEach(function (key) {
+		ret[key] = {
+			get: function () {
+				this._styles.push(key);
+				return this;
+			}
+		};
+	});
+
+	return ret;
+})();
+
+function init() {
+	var ret = {};
+
+	Object.keys(styles).forEach(function (name) {
+		ret[name] = {
+			get: function () {
+				var obj = defineProps(function self() {
+					var str = [].slice.call(arguments).join(' ');
+
+					if (!chalk.enabled) {
+						return str;
+					}
+
+					return self._styles.reduce(function (str, name) {
+						var code = ansi[name];
+						return str ? code.open + str + code.close : '';
+					}, str);
+				}, styles);
+
+				obj._styles = [];
+
+				return obj[name];
+			}
+		}
+	});
+
+	return ret;
+}
+
+defineProps(chalk, init());
+
+chalk.styles = ansi;
+chalk.stripColor = stripAnsi;
+chalk.supportsColor = hasColor;
+
+// detect mode if not set manually
+if (chalk.enabled === undefined) {
+	chalk.enabled = chalk.supportsColor;
+}
+
+},{"ansi-styles":2,"has-color":6,"strip-ansi":18}],5:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -1898,7 +2140,43 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],4:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
+(function (process){
+'use strict';
+module.exports = (function () {
+	if (process.argv.indexOf('--no-color') !== -1) {
+		return false;
+	}
+
+	if (process.argv.indexOf('--color') !== -1) {
+		return true;
+	}
+
+	if (process.stdout && !process.stdout.isTTY) {
+		return false;
+	}
+
+	if (process.platform === 'win32') {
+		return true;
+	}
+
+	if ('COLORTERM' in process.env) {
+		return true;
+	}
+
+	if (process.env.TERM === 'dumb') {
+		return false;
+	}
+
+	if (/^screen|^xterm|^vt100|color|ansi|cygwin|linux/i.test(process.env.TERM)) {
+		return true;
+	}
+
+	return false;
+})();
+
+}).call(this,require('_process'))
+},{"_process":16}],7:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -1923,697 +2201,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],5:[function(require,module,exports){
-// shim for using process in browser
-
-var process = module.exports = {};
-var queue = [];
-var draining = false;
-var currentQueue;
-var queueIndex = -1;
-
-function cleanUpNextTick() {
-    draining = false;
-    if (currentQueue.length) {
-        queue = currentQueue.concat(queue);
-    } else {
-        queueIndex = -1;
-    }
-    if (queue.length) {
-        drainQueue();
-    }
-}
-
-function drainQueue() {
-    if (draining) {
-        return;
-    }
-    var timeout = setTimeout(cleanUpNextTick);
-    draining = true;
-
-    var len = queue.length;
-    while(len) {
-        currentQueue = queue;
-        queue = [];
-        while (++queueIndex < len) {
-            if (currentQueue) {
-                currentQueue[queueIndex].run();
-            }
-        }
-        queueIndex = -1;
-        len = queue.length;
-    }
-    currentQueue = null;
-    draining = false;
-    clearTimeout(timeout);
-}
-
-process.nextTick = function (fun) {
-    var args = new Array(arguments.length - 1);
-    if (arguments.length > 1) {
-        for (var i = 1; i < arguments.length; i++) {
-            args[i - 1] = arguments[i];
-        }
-    }
-    queue.push(new Item(fun, args));
-    if (queue.length === 1 && !draining) {
-        setTimeout(drainQueue, 0);
-    }
-};
-
-// v8 likes predictible objects
-function Item(fun, array) {
-    this.fun = fun;
-    this.array = array;
-}
-Item.prototype.run = function () {
-    this.fun.apply(null, this.array);
-};
-process.title = 'browser';
-process.browser = true;
-process.env = {};
-process.argv = [];
-process.version = ''; // empty string to avoid regexp issues
-process.versions = {};
-
-function noop() {}
-
-process.on = noop;
-process.addListener = noop;
-process.once = noop;
-process.off = noop;
-process.removeListener = noop;
-process.removeAllListeners = noop;
-process.emit = noop;
-
-process.binding = function (name) {
-    throw new Error('process.binding is not supported');
-};
-
-process.cwd = function () { return '/' };
-process.chdir = function (dir) {
-    throw new Error('process.chdir is not supported');
-};
-process.umask = function() { return 0; };
-
-},{}],6:[function(require,module,exports){
-module.exports = function isBuffer(arg) {
-  return arg && typeof arg === 'object'
-    && typeof arg.copy === 'function'
-    && typeof arg.fill === 'function'
-    && typeof arg.readUInt8 === 'function';
-}
-},{}],7:[function(require,module,exports){
-(function (process,global){
-// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-var formatRegExp = /%[sdj%]/g;
-exports.format = function(f) {
-  if (!isString(f)) {
-    var objects = [];
-    for (var i = 0; i < arguments.length; i++) {
-      objects.push(inspect(arguments[i]));
-    }
-    return objects.join(' ');
-  }
-
-  var i = 1;
-  var args = arguments;
-  var len = args.length;
-  var str = String(f).replace(formatRegExp, function(x) {
-    if (x === '%%') return '%';
-    if (i >= len) return x;
-    switch (x) {
-      case '%s': return String(args[i++]);
-      case '%d': return Number(args[i++]);
-      case '%j':
-        try {
-          return JSON.stringify(args[i++]);
-        } catch (_) {
-          return '[Circular]';
-        }
-      default:
-        return x;
-    }
-  });
-  for (var x = args[i]; i < len; x = args[++i]) {
-    if (isNull(x) || !isObject(x)) {
-      str += ' ' + x;
-    } else {
-      str += ' ' + inspect(x);
-    }
-  }
-  return str;
-};
-
-
-// Mark that a method should not be used.
-// Returns a modified function which warns once by default.
-// If --no-deprecation is set, then it is a no-op.
-exports.deprecate = function(fn, msg) {
-  // Allow for deprecating things in the process of starting up.
-  if (isUndefined(global.process)) {
-    return function() {
-      return exports.deprecate(fn, msg).apply(this, arguments);
-    };
-  }
-
-  if (process.noDeprecation === true) {
-    return fn;
-  }
-
-  var warned = false;
-  function deprecated() {
-    if (!warned) {
-      if (process.throwDeprecation) {
-        throw new Error(msg);
-      } else if (process.traceDeprecation) {
-        console.trace(msg);
-      } else {
-        console.error(msg);
-      }
-      warned = true;
-    }
-    return fn.apply(this, arguments);
-  }
-
-  return deprecated;
-};
-
-
-var debugs = {};
-var debugEnviron;
-exports.debuglog = function(set) {
-  if (isUndefined(debugEnviron))
-    debugEnviron = process.env.NODE_DEBUG || '';
-  set = set.toUpperCase();
-  if (!debugs[set]) {
-    if (new RegExp('\\b' + set + '\\b', 'i').test(debugEnviron)) {
-      var pid = process.pid;
-      debugs[set] = function() {
-        var msg = exports.format.apply(exports, arguments);
-        console.error('%s %d: %s', set, pid, msg);
-      };
-    } else {
-      debugs[set] = function() {};
-    }
-  }
-  return debugs[set];
-};
-
-
-/**
- * Echos the value of a value. Trys to print the value out
- * in the best way possible given the different types.
- *
- * @param {Object} obj The object to print out.
- * @param {Object} opts Optional options object that alters the output.
- */
-/* legacy: obj, showHidden, depth, colors*/
-function inspect(obj, opts) {
-  // default options
-  var ctx = {
-    seen: [],
-    stylize: stylizeNoColor
-  };
-  // legacy...
-  if (arguments.length >= 3) ctx.depth = arguments[2];
-  if (arguments.length >= 4) ctx.colors = arguments[3];
-  if (isBoolean(opts)) {
-    // legacy...
-    ctx.showHidden = opts;
-  } else if (opts) {
-    // got an "options" object
-    exports._extend(ctx, opts);
-  }
-  // set default options
-  if (isUndefined(ctx.showHidden)) ctx.showHidden = false;
-  if (isUndefined(ctx.depth)) ctx.depth = 2;
-  if (isUndefined(ctx.colors)) ctx.colors = false;
-  if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
-  if (ctx.colors) ctx.stylize = stylizeWithColor;
-  return formatValue(ctx, obj, ctx.depth);
-}
-exports.inspect = inspect;
-
-
-// http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
-inspect.colors = {
-  'bold' : [1, 22],
-  'italic' : [3, 23],
-  'underline' : [4, 24],
-  'inverse' : [7, 27],
-  'white' : [37, 39],
-  'grey' : [90, 39],
-  'black' : [30, 39],
-  'blue' : [34, 39],
-  'cyan' : [36, 39],
-  'green' : [32, 39],
-  'magenta' : [35, 39],
-  'red' : [31, 39],
-  'yellow' : [33, 39]
-};
-
-// Don't use 'blue' not visible on cmd.exe
-inspect.styles = {
-  'special': 'cyan',
-  'number': 'yellow',
-  'boolean': 'yellow',
-  'undefined': 'grey',
-  'null': 'bold',
-  'string': 'green',
-  'date': 'magenta',
-  // "name": intentionally not styling
-  'regexp': 'red'
-};
-
-
-function stylizeWithColor(str, styleType) {
-  var style = inspect.styles[styleType];
-
-  if (style) {
-    return '\u001b[' + inspect.colors[style][0] + 'm' + str +
-           '\u001b[' + inspect.colors[style][1] + 'm';
-  } else {
-    return str;
-  }
-}
-
-
-function stylizeNoColor(str, styleType) {
-  return str;
-}
-
-
-function arrayToHash(array) {
-  var hash = {};
-
-  array.forEach(function(val, idx) {
-    hash[val] = true;
-  });
-
-  return hash;
-}
-
-
-function formatValue(ctx, value, recurseTimes) {
-  // Provide a hook for user-specified inspect functions.
-  // Check that value is an object with an inspect function on it
-  if (ctx.customInspect &&
-      value &&
-      isFunction(value.inspect) &&
-      // Filter out the util module, it's inspect function is special
-      value.inspect !== exports.inspect &&
-      // Also filter out any prototype objects using the circular check.
-      !(value.constructor && value.constructor.prototype === value)) {
-    var ret = value.inspect(recurseTimes, ctx);
-    if (!isString(ret)) {
-      ret = formatValue(ctx, ret, recurseTimes);
-    }
-    return ret;
-  }
-
-  // Primitive types cannot have properties
-  var primitive = formatPrimitive(ctx, value);
-  if (primitive) {
-    return primitive;
-  }
-
-  // Look up the keys of the object.
-  var keys = Object.keys(value);
-  var visibleKeys = arrayToHash(keys);
-
-  if (ctx.showHidden) {
-    keys = Object.getOwnPropertyNames(value);
-  }
-
-  // IE doesn't make error fields non-enumerable
-  // http://msdn.microsoft.com/en-us/library/ie/dww52sbt(v=vs.94).aspx
-  if (isError(value)
-      && (keys.indexOf('message') >= 0 || keys.indexOf('description') >= 0)) {
-    return formatError(value);
-  }
-
-  // Some type of object without properties can be shortcutted.
-  if (keys.length === 0) {
-    if (isFunction(value)) {
-      var name = value.name ? ': ' + value.name : '';
-      return ctx.stylize('[Function' + name + ']', 'special');
-    }
-    if (isRegExp(value)) {
-      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
-    }
-    if (isDate(value)) {
-      return ctx.stylize(Date.prototype.toString.call(value), 'date');
-    }
-    if (isError(value)) {
-      return formatError(value);
-    }
-  }
-
-  var base = '', array = false, braces = ['{', '}'];
-
-  // Make Array say that they are Array
-  if (isArray(value)) {
-    array = true;
-    braces = ['[', ']'];
-  }
-
-  // Make functions say that they are functions
-  if (isFunction(value)) {
-    var n = value.name ? ': ' + value.name : '';
-    base = ' [Function' + n + ']';
-  }
-
-  // Make RegExps say that they are RegExps
-  if (isRegExp(value)) {
-    base = ' ' + RegExp.prototype.toString.call(value);
-  }
-
-  // Make dates with properties first say the date
-  if (isDate(value)) {
-    base = ' ' + Date.prototype.toUTCString.call(value);
-  }
-
-  // Make error with message first say the error
-  if (isError(value)) {
-    base = ' ' + formatError(value);
-  }
-
-  if (keys.length === 0 && (!array || value.length == 0)) {
-    return braces[0] + base + braces[1];
-  }
-
-  if (recurseTimes < 0) {
-    if (isRegExp(value)) {
-      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
-    } else {
-      return ctx.stylize('[Object]', 'special');
-    }
-  }
-
-  ctx.seen.push(value);
-
-  var output;
-  if (array) {
-    output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
-  } else {
-    output = keys.map(function(key) {
-      return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
-    });
-  }
-
-  ctx.seen.pop();
-
-  return reduceToSingleString(output, base, braces);
-}
-
-
-function formatPrimitive(ctx, value) {
-  if (isUndefined(value))
-    return ctx.stylize('undefined', 'undefined');
-  if (isString(value)) {
-    var simple = '\'' + JSON.stringify(value).replace(/^"|"$/g, '')
-                                             .replace(/'/g, "\\'")
-                                             .replace(/\\"/g, '"') + '\'';
-    return ctx.stylize(simple, 'string');
-  }
-  if (isNumber(value))
-    return ctx.stylize('' + value, 'number');
-  if (isBoolean(value))
-    return ctx.stylize('' + value, 'boolean');
-  // For some reason typeof null is "object", so special case here.
-  if (isNull(value))
-    return ctx.stylize('null', 'null');
-}
-
-
-function formatError(value) {
-  return '[' + Error.prototype.toString.call(value) + ']';
-}
-
-
-function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
-  var output = [];
-  for (var i = 0, l = value.length; i < l; ++i) {
-    if (hasOwnProperty(value, String(i))) {
-      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-          String(i), true));
-    } else {
-      output.push('');
-    }
-  }
-  keys.forEach(function(key) {
-    if (!key.match(/^\d+$/)) {
-      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-          key, true));
-    }
-  });
-  return output;
-}
-
-
-function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
-  var name, str, desc;
-  desc = Object.getOwnPropertyDescriptor(value, key) || { value: value[key] };
-  if (desc.get) {
-    if (desc.set) {
-      str = ctx.stylize('[Getter/Setter]', 'special');
-    } else {
-      str = ctx.stylize('[Getter]', 'special');
-    }
-  } else {
-    if (desc.set) {
-      str = ctx.stylize('[Setter]', 'special');
-    }
-  }
-  if (!hasOwnProperty(visibleKeys, key)) {
-    name = '[' + key + ']';
-  }
-  if (!str) {
-    if (ctx.seen.indexOf(desc.value) < 0) {
-      if (isNull(recurseTimes)) {
-        str = formatValue(ctx, desc.value, null);
-      } else {
-        str = formatValue(ctx, desc.value, recurseTimes - 1);
-      }
-      if (str.indexOf('\n') > -1) {
-        if (array) {
-          str = str.split('\n').map(function(line) {
-            return '  ' + line;
-          }).join('\n').substr(2);
-        } else {
-          str = '\n' + str.split('\n').map(function(line) {
-            return '   ' + line;
-          }).join('\n');
-        }
-      }
-    } else {
-      str = ctx.stylize('[Circular]', 'special');
-    }
-  }
-  if (isUndefined(name)) {
-    if (array && key.match(/^\d+$/)) {
-      return str;
-    }
-    name = JSON.stringify('' + key);
-    if (name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/)) {
-      name = name.substr(1, name.length - 2);
-      name = ctx.stylize(name, 'name');
-    } else {
-      name = name.replace(/'/g, "\\'")
-                 .replace(/\\"/g, '"')
-                 .replace(/(^"|"$)/g, "'");
-      name = ctx.stylize(name, 'string');
-    }
-  }
-
-  return name + ': ' + str;
-}
-
-
-function reduceToSingleString(output, base, braces) {
-  var numLinesEst = 0;
-  var length = output.reduce(function(prev, cur) {
-    numLinesEst++;
-    if (cur.indexOf('\n') >= 0) numLinesEst++;
-    return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
-  }, 0);
-
-  if (length > 60) {
-    return braces[0] +
-           (base === '' ? '' : base + '\n ') +
-           ' ' +
-           output.join(',\n  ') +
-           ' ' +
-           braces[1];
-  }
-
-  return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
-}
-
-
-// NOTE: These type checking functions intentionally don't use `instanceof`
-// because it is fragile and can be easily faked with `Object.create()`.
-function isArray(ar) {
-  return Array.isArray(ar);
-}
-exports.isArray = isArray;
-
-function isBoolean(arg) {
-  return typeof arg === 'boolean';
-}
-exports.isBoolean = isBoolean;
-
-function isNull(arg) {
-  return arg === null;
-}
-exports.isNull = isNull;
-
-function isNullOrUndefined(arg) {
-  return arg == null;
-}
-exports.isNullOrUndefined = isNullOrUndefined;
-
-function isNumber(arg) {
-  return typeof arg === 'number';
-}
-exports.isNumber = isNumber;
-
-function isString(arg) {
-  return typeof arg === 'string';
-}
-exports.isString = isString;
-
-function isSymbol(arg) {
-  return typeof arg === 'symbol';
-}
-exports.isSymbol = isSymbol;
-
-function isUndefined(arg) {
-  return arg === void 0;
-}
-exports.isUndefined = isUndefined;
-
-function isRegExp(re) {
-  return isObject(re) && objectToString(re) === '[object RegExp]';
-}
-exports.isRegExp = isRegExp;
-
-function isObject(arg) {
-  return typeof arg === 'object' && arg !== null;
-}
-exports.isObject = isObject;
-
-function isDate(d) {
-  return isObject(d) && objectToString(d) === '[object Date]';
-}
-exports.isDate = isDate;
-
-function isError(e) {
-  return isObject(e) &&
-      (objectToString(e) === '[object Error]' || e instanceof Error);
-}
-exports.isError = isError;
-
-function isFunction(arg) {
-  return typeof arg === 'function';
-}
-exports.isFunction = isFunction;
-
-function isPrimitive(arg) {
-  return arg === null ||
-         typeof arg === 'boolean' ||
-         typeof arg === 'number' ||
-         typeof arg === 'string' ||
-         typeof arg === 'symbol' ||  // ES6 symbol
-         typeof arg === 'undefined';
-}
-exports.isPrimitive = isPrimitive;
-
-exports.isBuffer = require('./support/isBuffer');
-
-function objectToString(o) {
-  return Object.prototype.toString.call(o);
-}
-
-
-function pad(n) {
-  return n < 10 ? '0' + n.toString(10) : n.toString(10);
-}
-
-
-var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
-              'Oct', 'Nov', 'Dec'];
-
-// 26 Feb 16:19:34
-function timestamp() {
-  var d = new Date();
-  var time = [pad(d.getHours()),
-              pad(d.getMinutes()),
-              pad(d.getSeconds())].join(':');
-  return [d.getDate(), months[d.getMonth()], time].join(' ');
-}
-
-
-// log is just a thin wrapper to console.log that prepends a timestamp
-exports.log = function() {
-  console.log('%s - %s', timestamp(), exports.format.apply(exports, arguments));
-};
-
-
-/**
- * Inherit the prototype methods from one constructor into another.
- *
- * The Function.prototype.inherits from lang.js rewritten as a standalone
- * function (not on Function.prototype). NOTE: If this file is to be loaded
- * during bootstrapping this function needs to be rewritten using some native
- * functions as prototype setup using normal JavaScript does not work as
- * expected during bootstrapping (see mirror.js in r114903).
- *
- * @param {function} ctor Constructor function which needs to inherit the
- *     prototype.
- * @param {function} superCtor Constructor function to inherit prototype from.
- */
-exports.inherits = require('inherits');
-
-exports._extend = function(origin, add) {
-  // Don't do anything if add isn't an object
-  if (!add || !isObject(add)) return origin;
-
-  var keys = Object.keys(add);
-  var i = keys.length;
-  while (i--) {
-    origin[keys[i]] = add[keys[i]];
-  }
-  return origin;
-};
-
-function hasOwnProperty(obj, prop) {
-  return Object.prototype.hasOwnProperty.call(obj, prop);
-}
-
-}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":6,"_process":5,"inherits":4}],8:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 module.exports.Resolver      = require('./lib/Resolver');
 module.exports.Bootstrapper  = require('./lib/Bootstrapper');
 module.exports.KevoreeLogger = require('./lib/KevoreeLogger');
@@ -2683,14 +2271,14 @@ var Bootstrapper = Class({
 
         // --- Resolvers callback
         var bootstrapper = this;
-        this.resolver.resolve(deployUnit, forceInstall, function (err, EntityClass, model) {
+        this.resolver.resolve(deployUnit, forceInstall, function (err, EntityClass) {
             if (err) {
                 bootstrapper.log.error(bootstrapper.toString(), err.stack);
-                return callback(new Error("'"+deployUnit.name+"' bootstrap failed!"));
+                return callback(new Error("'"+deployUnit.name+'@'+deployUnit.version+"' bootstrap failed!"));
             }
 
             // install success
-            callback(null, EntityClass, model);
+            callback(null, EntityClass);
         });
     },
 
@@ -2704,7 +2292,7 @@ var Bootstrapper = Class({
         this.resolver.uninstall(deployUnit, function (err) {
             if (err) {
                 bootstrapper.log.error(bootstrapper.toString(), err.stack);
-                callback(new Error("'"+deployUnit.name+"' uninstall failed!"));
+                callback(new Error("'"+deployUnit.name+'@'+deployUnit.version+"' uninstall failed!"));
                 return;
             }
 
@@ -2715,6 +2303,7 @@ var Bootstrapper = Class({
 });
 
 module.exports = Bootstrapper;
+
 },{"pseudoclass":17}],10:[function(require,module,exports){
 var Class = require('pseudoclass');
 
@@ -2865,7 +2454,7 @@ KevoreeLogger.ERROR = LEVELS.indexOf('error');
 KevoreeLogger.QUIET = LEVELS.indexOf('quiet');
 
 module.exports = KevoreeLogger;
-},{"chalk":13,"pseudoclass":17}],12:[function(require,module,exports){
+},{"chalk":4,"pseudoclass":17}],12:[function(require,module,exports){
 var Class = require('pseudoclass'),
     KevoreeLogger = require('./KevoreeLogger');
 
@@ -2893,494 +2482,988 @@ var Resolver = Class({
     uninstall: function (deployUnit, force, callback) {},
 
     addRepository: function (url) {
-        if (this.repositories.indexOf(url) === -1) this.repositories.push(url);
+        if (this.repositories.indexOf(url) === -1) {
+            this.repositories.push(url);
+        }
     }
 });
 
 module.exports = Resolver;
+
 },{"./KevoreeLogger":11,"pseudoclass":17}],13:[function(require,module,exports){
-'use strict';
-var ansi = require('ansi-styles');
-var stripAnsi = require('strip-ansi');
-var hasColor = require('has-color');
-var defineProps = Object.defineProperties;
-var chalk = module.exports;
+module.exports = require('./lib/kotlin');
 
-var styles = (function () {
-	var ret = {};
-
-	ansi.grey = ansi.gray;
-
-	Object.keys(ansi).forEach(function (key) {
-		ret[key] = {
-			get: function () {
-				this._styles.push(key);
-				return this;
-			}
-		};
-	});
-
-	return ret;
+},{"./lib/kotlin":14}],14:[function(require,module,exports){
+'use strict';var Kotlin = {};
+(function() {
+  function g(a, b) {
+    if (null != a && null != b) {
+      for (var c in b) {
+        b.hasOwnProperty(c) && (a[c] = b[c]);
+      }
+    }
+  }
+  function h(a) {
+    for (var b = 0;b < a.length;b++) {
+      if (null != a[b] && null == a[b].$metadata$ || a[b].$metadata$.type === Kotlin.TYPE.CLASS) {
+        return a[b];
+      }
+    }
+    return null;
+  }
+  function e(a, b, c) {
+    for (var f = 0;f < b.length;f++) {
+      if (null == b[f] || null != b[f].$metadata$) {
+        var d = c(b[f]), k;
+        for (k in d) {
+          d.hasOwnProperty(k) && (!a.hasOwnProperty(k) || a[k].$classIndex$ < d[k].$classIndex$) && (a[k] = d[k]);
+        }
+      }
+    }
+  }
+  function d(a, b) {
+    var c = {};
+    c.baseClasses = null == a ? [] : Array.isArray(a) ? a : [a];
+    c.baseClass = h(c.baseClasses);
+    c.classIndex = Kotlin.newClassIndex();
+    c.functions = {};
+    c.properties = {};
+    if (null != b) {
+      for (var f in b) {
+        if (b.hasOwnProperty(f)) {
+          var d = b[f];
+          d.$classIndex$ = c.classIndex;
+          "function" === typeof d ? c.functions[f] = d : c.properties[f] = d;
+        }
+      }
+    }
+    e(c.functions, c.baseClasses, function(a) {
+      return a.$metadata$.functions;
+    });
+    e(c.properties, c.baseClasses, function(a) {
+      return a.$metadata$.properties;
+    });
+    return c;
+  }
+  function a() {
+    var a = this.object_initializer$();
+    Object.defineProperty(this, "object", {value:a});
+    return a;
+  }
+  function b(a) {
+    return "function" === typeof a ? a() : a;
+  }
+  function c(a, b) {
+    if (null != a && null == a.$metadata$ || a.$metadata$.classIndex < b.$metadata$.classIndex) {
+      return!1;
+    }
+    var f = a.$metadata$.baseClasses, d;
+    for (d = 0;d < f.length;d++) {
+      if (f[d] === b) {
+        return!0;
+      }
+    }
+    for (d = 0;d < f.length;d++) {
+      if (c(f[d], b)) {
+        return!0;
+      }
+    }
+    return!1;
+  }
+  function f(a, b) {
+    return function() {
+      if (null !== b) {
+        var c = b;
+        b = null;
+        c.call(a);
+      }
+      return a;
+    };
+  }
+  function m(a) {
+    var b = {};
+    if (null == a) {
+      return b;
+    }
+    for (var c in a) {
+      a.hasOwnProperty(c) && ("function" === typeof a[c] ? a[c].type === Kotlin.TYPE.INIT_FUN ? (a[c].className = c, Object.defineProperty(b, c, {get:a[c], configurable:!0})) : b[c] = a[c] : Object.defineProperty(b, c, a[c]));
+    }
+    return b;
+  }
+  var l = function() {
+    return function() {
+    };
+  };
+  Kotlin.TYPE = {CLASS:"class", TRAIT:"trait", OBJECT:"object", INIT_FUN:"init fun"};
+  Kotlin.classCount = 0;
+  Kotlin.newClassIndex = function() {
+    var a = Kotlin.classCount;
+    Kotlin.classCount++;
+    return a;
+  };
+  Kotlin.createClassNow = function(b, c, f, e) {
+    null == c && (c = l());
+    g(c, e);
+    b = d(b, f);
+    b.type = Kotlin.TYPE.CLASS;
+    f = null !== b.baseClass ? Object.create(b.baseClass.prototype) : {};
+    Object.defineProperties(f, b.properties);
+    g(f, b.functions);
+    f.constructor = c;
+    null != b.baseClass && (c.baseInitializer = b.baseClass);
+    c.$metadata$ = b;
+    c.prototype = f;
+    Object.defineProperty(c, "object", {get:a, configurable:!0});
+    return c;
+  };
+  Kotlin.createObjectNow = function(a, b, c) {
+    a = new (Kotlin.createClassNow(a, b, c));
+    a.$metadata$ = {type:Kotlin.TYPE.OBJECT};
+    return a;
+  };
+  Kotlin.createTraitNow = function(b, c, f) {
+    var e = function() {
+    };
+    g(e, f);
+    e.$metadata$ = d(b, c);
+    e.$metadata$.type = Kotlin.TYPE.TRAIT;
+    e.prototype = {};
+    Object.defineProperties(e.prototype, e.$metadata$.properties);
+    g(e.prototype, e.$metadata$.functions);
+    Object.defineProperty(e, "object", {get:a, configurable:!0});
+    return e;
+  };
+  Kotlin.createClass = function(a, c, f, d) {
+    function e() {
+      var k = Kotlin.createClassNow(b(a), c, f, d);
+      Object.defineProperty(this, e.className, {value:k});
+      return k;
+    }
+    e.type = Kotlin.TYPE.INIT_FUN;
+    return e;
+  };
+  Kotlin.createTrait = function(a, c, f) {
+    function d() {
+      var e = Kotlin.createTraitNow(b(a), c, f);
+      Object.defineProperty(this, d.className, {value:e});
+      return e;
+    }
+    d.type = Kotlin.TYPE.INIT_FUN;
+    return d;
+  };
+  Kotlin.createObject = function(a, c, f) {
+    return Kotlin.createObjectNow(b(a), c, f);
+  };
+  Kotlin.callGetter = function(a, b, c) {
+    return b.$metadata$.properties[c].get.call(a);
+  };
+  Kotlin.callSetter = function(a, b, c, f) {
+    b.$metadata$.properties[c].set.call(a, f);
+  };
+  Kotlin.isType = function(a, b) {
+    return null == a || null == b ? !1 : a instanceof b ? !0 : null != b && null == b.$metadata$ || b.$metadata$.type == Kotlin.TYPE.CLASS ? !1 : c(a.constructor, b);
+  };
+  Kotlin.modules = {};
+  Kotlin.definePackage = function(a, b) {
+    var c = m(b);
+    return null === a ? {value:c} : {get:f(c, a)};
+  };
+  Kotlin.defineRootPackage = function(a, b) {
+    var c = m(b);
+    c.$initializer$ = null === a ? l() : a;
+    return c;
+  };
+  Kotlin.defineModule = function(a, b) {
+    if (a in Kotlin.modules) {
+      throw Error("Module " + a + " is already defined");
+    }
+    b.$initializer$.call(b);
+    Object.defineProperty(Kotlin.modules, a, {value:b});
+  };
 })();
-
-function init() {
-	var ret = {};
-
-	Object.keys(styles).forEach(function (name) {
-		ret[name] = {
-			get: function () {
-				var obj = defineProps(function self() {
-					var str = [].slice.call(arguments).join(' ');
-
-					if (!chalk.enabled) {
-						return str;
-					}
-
-					return self._styles.reduce(function (str, name) {
-						var code = ansi[name];
-						return str ? code.open + str + code.close : '';
-					}, str);
-				}, styles);
-
-				obj._styles = [];
-
-				return obj[name];
-			}
-		}
-	});
-
-	return ret;
-}
-
-defineProps(chalk, init());
-
-chalk.styles = ansi;
-chalk.stripColor = stripAnsi;
-chalk.supportsColor = hasColor;
-
-// detect mode if not set manually
-if (chalk.enabled === undefined) {
-	chalk.enabled = chalk.supportsColor;
-}
-
-},{"ansi-styles":14,"has-color":15,"strip-ansi":16}],14:[function(require,module,exports){
-'use strict';
-var styles = module.exports;
-
-var codes = {
-	reset: [0, 0],
-
-	bold: [1, 22],
-	italic: [3, 23],
-	underline: [4, 24],
-	inverse: [7, 27],
-	strikethrough: [9, 29],
-
-	black: [30, 39],
-	red: [31, 39],
-	green: [32, 39],
-	yellow: [33, 39],
-	blue: [34, 39],
-	magenta: [35, 39],
-	cyan: [36, 39],
-	white: [37, 39],
-	gray: [90, 39],
-
-	bgBlack: [40, 49],
-	bgRed: [41, 49],
-	bgGreen: [42, 49],
-	bgYellow: [43, 49],
-	bgBlue: [44, 49],
-	bgMagenta: [45, 49],
-	bgCyan: [46, 49],
-	bgWhite: [47, 49]
-};
-
-Object.keys(codes).forEach(function (key) {
-	var val = codes[key];
-	var style = styles[key] = {};
-	style.open = '\x1b[' + val[0] + 'm';
-	style.close = '\x1b[' + val[1] + 'm';
+(function() {
+  function g(a) {
+    return function() {
+      throw new TypeError(void 0 !== a ? "Function " + a + " is abstract" : "Function is abstract");
+    };
+  }
+  String.prototype.startsWith = function(a) {
+    return 0 === this.indexOf(a);
+  };
+  String.prototype.endsWith = function(a) {
+    return-1 !== this.indexOf(a, this.length - a.length);
+  };
+  String.prototype.contains = function(a) {
+    return-1 !== this.indexOf(a);
+  };
+  Kotlin.equals = function(a, b) {
+    return null == a ? null == b : Array.isArray(a) ? Kotlin.arrayEquals(a, b) : "object" == typeof a && void 0 !== a.equals_za3rmp$ ? a.equals_za3rmp$(b) : a === b;
+  };
+  Kotlin.toString = function(a) {
+    return null == a ? "null" : Array.isArray(a) ? Kotlin.arrayToString(a) : a.toString();
+  };
+  Kotlin.arrayToString = function(a) {
+    return "[" + a.join(", ") + "]";
+  };
+  Kotlin.intUpto = function(a, b) {
+    return new Kotlin.NumberRange(a, b);
+  };
+  Kotlin.intDownto = function(a, b) {
+    return new Kotlin.Progression(a, b, -1);
+  };
+  Kotlin.RuntimeException = Kotlin.createClassNow();
+  Kotlin.NullPointerException = Kotlin.createClassNow();
+  Kotlin.NoSuchElementException = Kotlin.createClassNow();
+  Kotlin.IllegalArgumentException = Kotlin.createClassNow();
+  Kotlin.IllegalStateException = Kotlin.createClassNow();
+  Kotlin.UnsupportedOperationException = Kotlin.createClassNow();
+  Kotlin.IOException = Kotlin.createClassNow();
+  Kotlin.throwNPE = function() {
+    throw new Kotlin.NullPointerException;
+  };
+  Kotlin.Iterator = Kotlin.createClassNow(null, null, {next:g("Iterator#next"), hasNext:g("Iterator#hasNext")});
+  var h = Kotlin.createClassNow(Kotlin.Iterator, function(a) {
+    this.array = a;
+    this.index = 0;
+  }, {next:function() {
+    return this.array[this.index++];
+  }, hasNext:function() {
+    return this.index < this.array.length;
+  }, remove:function() {
+    if (0 > this.index || this.index > this.array.length) {
+      throw new RangeError;
+    }
+    this.index--;
+    this.array.splice(this.index, 1);
+  }}), e = Kotlin.createClassNow(h, function(a) {
+    this.list = a;
+    this.size = a.size();
+    this.index = 0;
+  }, {next:function() {
+    return this.list.get(this.index++);
+  }});
+  Kotlin.Collection = Kotlin.createClassNow();
+  Kotlin.Enum = Kotlin.createClassNow(null, function() {
+    this.ordinal$ = this.name$ = void 0;
+  }, {name:function() {
+    return this.name$;
+  }, ordinal:function() {
+    return this.ordinal$;
+  }, toString:function() {
+    return this.name();
+  }});
+  (function() {
+    function a(a) {
+      return this[a];
+    }
+    function b() {
+      return this.values$;
+    }
+    Kotlin.createEnumEntries = function(c) {
+      var f = 0, d = [], e;
+      for (e in c) {
+        if (c.hasOwnProperty(e)) {
+          var g = c[e];
+          d[f] = g;
+          g.ordinal$ = f;
+          g.name$ = e;
+          f++;
+        }
+      }
+      c.values$ = d;
+      c.valueOf_61zpoe$ = c.valueOf = a; // FIX because Enum.valueOf() is called instead of valueOf_61zpoe$()
+      c.values = b;
+      return c;
+    };
+  })();
+  Kotlin.PropertyMetadata = Kotlin.createClassNow(null, function(a) {
+    this.name = a;
+  });
+  Kotlin.AbstractCollection = Kotlin.createClassNow(Kotlin.Collection, null, {addAll_xeylzf$:function(a) {
+    var b = !1;
+    for (a = a.iterator();a.hasNext();) {
+      this.add_za3rmp$(a.next()) && (b = !0);
+    }
+    return b;
+  }, removeAll_xeylzf$:function(a) {
+    for (var b = !1, c = this.iterator();c.hasNext();) {
+      a.contains_za3rmp$(c.next()) && (c.remove(), b = !0);
+    }
+    return b;
+  }, retainAll_xeylzf$:function(a) {
+    for (var b = !1, c = this.iterator();c.hasNext();) {
+      a.contains_za3rmp$(c.next()) || (c.remove(), b = !0);
+    }
+    return b;
+  }, containsAll_xeylzf$:function(a) {
+    for (a = a.iterator();a.hasNext();) {
+      if (!this.contains_za3rmp$(a.next())) {
+        return!1;
+      }
+    }
+    return!0;
+  }, isEmpty:function() {
+    return 0 === this.size();
+  }, iterator:function() {
+    return new h(this.toArray());
+  }, equals_za3rmp$:function(a) {
+    if (this.size() !== a.size()) {
+      return!1;
+    }
+    var b = this.iterator();
+    a = a.iterator();
+    for (var c = this.size();0 < c--;) {
+      if (!Kotlin.equals(b.next(), a.next())) {
+        return!1;
+      }
+    }
+    return!0;
+  }, toString:function() {
+    for (var a = "[", b = this.iterator(), c = !0, f = this.size();0 < f--;) {
+      c ? c = !1 : a += ", ", a += b.next();
+    }
+    return a + "]";
+  }, toJSON:function() {
+    return this.toArray();
+  }});
+  Kotlin.AbstractList = Kotlin.createClassNow(Kotlin.AbstractCollection, null, {iterator:function() {
+    return new e(this);
+  }, remove_za3rmp$:function(a) {
+    a = this.indexOf_za3rmp$(a);
+    return-1 !== a ? (this.remove_za3lpa$(a), !0) : !1;
+  }, contains_za3rmp$:function(a) {
+    return-1 !== this.indexOf_za3rmp$(a);
+  }});
+  Kotlin.ArrayList = Kotlin.createClassNow(Kotlin.AbstractList, function() {
+    this.array = [];
+  }, {get_za3lpa$:function(a) {
+    this.checkRange(a);
+    return this.array[a];
+  },get:function(a){return this.get_za3lpa$(a);}
+   , set_vux3hl$:function(a, b) {
+    this.checkRange(a);
+    this.array[a] = b;
+  }, size:function() {
+    return this.array.length;
+  }, iterator:function() {
+    return Kotlin.arrayIterator(this.array);
+  }, add_za3rmp$:function(a) {
+    this.array.push(a);
+    return!0;
+  }, add_vux3hl$:function(a, b) {
+    this.array.splice(a, 0, b);
+  }, addAll_xeylzf$:function(a) {
+    var b = a.iterator(), c = this.array.length;
+    for (a = a.size();0 < a--;) {
+      this.array[c++] = b.next();
+    }
+  }, remove_za3lpa$:function(a) {
+    this.checkRange(a);
+    return this.array.splice(a, 1)[0];
+  }, clear:function() {
+    this.array.length = 0;
+  }, indexOf_za3rmp$:function(a) {
+    for (var b = 0;b < this.array.length;b++) {
+      if (Kotlin.equals(this.array[b], a)) {
+        return b;
+      }
+    }
+    return-1;
+  }, lastIndexOf_za3rmp$:function(a) {
+    for (var b = this.array.length - 1;0 <= b;b--) {
+      if (Kotlin.equals(this.array[b], a)) {
+        return b;
+      }
+    }
+    return-1;
+  }, toArray:function() {
+    return this.array.slice(0);
+  }, toString:function() {
+    return "[" + this.array.join(", ") + "]";
+  }, toJSON:function() {
+    return this.array;
+  }, checkRange:function(a) {
+    if (0 > a || a >= this.array.length) {
+      throw new RangeError;
+    }
+  }});
+  Kotlin.Runnable = Kotlin.createClassNow(null, null, {run:g("Runnable#run")});
+  Kotlin.Comparable = Kotlin.createClassNow(null, null, {compareTo:g("Comparable#compareTo")});
+  Kotlin.Appendable = Kotlin.createClassNow(null, null, {append:g("Appendable#append")});
+  Kotlin.Closeable = Kotlin.createClassNow(null, null, {close:g("Closeable#close")});
+  Kotlin.safeParseInt = function(a) {
+    a = parseInt(a, 10);
+    return isNaN(a) ? null : a;
+  };
+  Kotlin.safeParseDouble = function(a) {
+    a = parseFloat(a);
+    return isNaN(a) ? null : a;
+  };
+  Kotlin.arrayEquals = function(a, b) {
+    if (a === b) {
+      return!0;
+    }
+    if (!Array.isArray(b) || a.length !== b.length) {
+      return!1;
+    }
+    for (var c = 0, f = a.length;c < f;c++) {
+      if (!Kotlin.equals(a[c], b[c])) {
+        return!1;
+      }
+    }
+    return!0;
+  };
+  Kotlin.System = function() {
+    var a = "", b = function(b) {
+      void 0 !== b && (a = null === b || "object" !== typeof b ? a + b : a + b.toString());
+    }, c = function(b) {
+      this.print(b);
+      a += "\n";
+    };
+    return{out:function() {
+      return{print:b, println:c};
+    }, output:function() {
+      return a;
+    }, flush:function() {
+      a = "";
+    }};
+  }();
+  Kotlin.println = function(a) {
+    Kotlin.System.out().println(a);
+  };
+  Kotlin.print = function(a) {
+    Kotlin.System.out().print(a);
+  };
+  Kotlin.RangeIterator = Kotlin.createClassNow(Kotlin.Iterator, function(a, b, c) {
+    this.start = a;
+    this.end = b;
+    this.increment = c;
+    this.i = a;
+  }, {next:function() {
+    var a = this.i;
+    this.i += this.increment;
+    return a;
+  }, hasNext:function() {
+    return this.i <= this.end;
+  }});
+  Kotlin.NumberRange = Kotlin.createClassNow(null, function(a, b) {
+    this.start = a;
+    this.end = b;
+    this.increment = 1;
+  }, {contains:function(a) {
+    return this.start <= a && a <= this.end;
+  }, iterator:function() {
+    return new Kotlin.RangeIterator(this.start, this.end);
+  }});
+  Kotlin.Progression = Kotlin.createClassNow(null, function(a, b, c) {
+    this.start = a;
+    this.end = b;
+    this.increment = c;
+  }, {iterator:function() {
+    return new Kotlin.RangeIterator(this.start, this.end, this.increment);
+  }});
+  Kotlin.Comparator = Kotlin.createClassNow(null, null, {compare:g("Comparator#compare")});
+  var d = Kotlin.createClassNow(Kotlin.Comparator, function(a) {
+    this.compare = a;
+  });
+  Kotlin.comparator = function(a) {
+    return new d(a);
+  };
+  Kotlin.collectionsMax = function(a, b) {
+    if (a.isEmpty()) {
+      throw Error();
+    }
+    for (var c = a.iterator(), f = c.next();c.hasNext();) {
+      var d = c.next();
+      0 > b.compare(f, d) && (f = d);
+    }
+    return f;
+  };
+  Kotlin.collectionsSort = function(a, b) {
+    var c = void 0;
+    void 0 !== b && (c = b.compare.bind(b));
+    a instanceof Array && a.sort(c);
+    for (var f = [], d = a.iterator();d.hasNext();) {
+      f.push(d.next());
+    }
+    f.sort(c);
+    c = 0;
+    for (d = f.length;c < d;c++) {
+      a.set_vux3hl$(c, f[c]);
+    }
+  };
+  Kotlin.copyToArray = function(a) {
+    var b = [];
+    for (a = a.iterator();a.hasNext();) {
+      b.push(a.next());
+    }
+    return b;
+  };
+  Kotlin.StringBuilder = Kotlin.createClassNow(null, function() {
+    this.string = "";
+  }, {append:function(a) {
+    this.string += a.toString();
+    return this;
+  }, toString:function() {
+    return this.string;
+  }});
+  Kotlin.splitString = function(a, b, c) {
+    return a.split(RegExp(b), c);
+  };
+  Kotlin.nullArray = function(a) {
+    for (var b = [];0 < a;) {
+      b[--a] = null;
+    }
+    return b;
+  };
+  Kotlin.numberArrayOfSize = function(a) {
+    return Kotlin.arrayFromFun(a, function() {
+      return 0;
+    });
+  };
+  Kotlin.charArrayOfSize = function(a) {
+    return Kotlin.arrayFromFun(a, function() {
+      return "\x00";
+    });
+  };
+  Kotlin.booleanArrayOfSize = function(a) {
+    return Kotlin.arrayFromFun(a, function() {
+      return!1;
+    });
+  };
+  Kotlin.arrayFromFun = function(a, b) {
+    for (var c = Array(a), d = 0;d < a;d++) {
+      c[d] = b(d);
+    }
+    return c;
+  };
+  Kotlin.arrayIndices = function(a) {
+    return new Kotlin.NumberRange(0, a.length - 1);
+  };
+  Kotlin.arrayIterator = function(a) {
+    return new h(a);
+  };
+  Kotlin.jsonFromTuples = function(a) {
+    for (var b = a.length, c = {};0 < b;) {
+      --b, c[a[b][0]] = a[b][1];
+    }
+    return c;
+  };
+  Kotlin.jsonAddProperties = function(a, b) {
+    for (var c in b) {
+      b.hasOwnProperty(c) && (a[c] = b[c]);
+    }
+    return a;
+  };
+})();
+(function() {
+  function g(a) {
+    if ("string" == typeof a) {
+      return a;
+    }
+    if ("function" == typeof a.hashCode) {
+      return a = a.hashCode(), "string" == typeof a ? a : g(a);
+    }
+    if ("function" == typeof a.toString) {
+      return a.toString();
+    }
+    try {
+      return String(a);
+    } catch (b) {
+      return Object.prototype.toString.call(a);
+    }
+  }
+  function h(a, b) {
+    return a.equals(b);
+  }
+  function e(a, b) {
+    return "function" == typeof b.equals ? b.equals(a) : a === b;
+  }
+  function d(a) {
+    return function(b) {
+      if (null === b) {
+        throw Error("null is not a valid " + a);
+      }
+      if ("undefined" == typeof b) {
+        throw Error(a + " must not be undefined");
+      }
+    };
+  }
+  function a(a, b, c, d) {
+    this[0] = a;
+    this.entries = [];
+    this.addEntry(b, c);
+    null !== d && (this.getEqualityFunction = function() {
+      return d;
+    });
+  }
+  function b(a) {
+    return function(b) {
+      for (var c = this.entries.length, d, f = this.getEqualityFunction(b);c--;) {
+        if (d = this.entries[c], f(b, d[0])) {
+          switch(a) {
+            case n:
+              return!0;
+            case s:
+              return d;
+            case t:
+              return[c, d[1]];
+          }
+        }
+      }
+      return!1;
+    };
+  }
+  function c(a) {
+    return function(b) {
+      for (var c = b.length, d = 0, f = this.entries.length;d < f;++d) {
+        b[c + d] = this.entries[d][a];
+      }
+    };
+  }
+  function f(b, c) {
+    var d = b[c];
+    return d && d instanceof a ? d : null;
+  }
+  var m = "function" == typeof Array.prototype.splice ? function(a, b) {
+    a.splice(b, 1);
+  } : function(a, b) {
+    var c, d, f;
+    if (b === a.length - 1) {
+      a.length = b;
+    } else {
+      for (c = a.slice(b + 1), a.length = b, d = 0, f = c.length;d < f;++d) {
+        a[b + d] = c[d];
+      }
+    }
+  }, l = d("key"), r = d("value"), n = 0, s = 1, t = 2;
+  a.prototype = {getEqualityFunction:function(a) {
+    return "function" == typeof a.equals ? h : e;
+  }, getEntryForKey:b(s), getEntryAndIndexForKey:b(t), removeEntryForKey:function(a) {
+    return(a = this.getEntryAndIndexForKey(a)) ? (m(this.entries, a[0]), a[1]) : null;
+  }, addEntry:function(a, b) {
+    this.entries[this.entries.length] = [a, b];
+  }, keys:c(0), values:c(1), getEntries:function(a) {
+    for (var b = a.length, c = 0, d = this.entries.length;c < d;++c) {
+      a[b + c] = this.entries[c].slice(0);
+    }
+  }, containsKey_za3rmp$:b(n), containsValue_za3rmp$:function(a) {
+    for (var b = this.entries.length;b--;) {
+      if (a === this.entries[b][1]) {
+        return!0;
+      }
+    }
+    return!1;
+  }};
+  var u = function(b, c) {
+    var d = this, e = [], h = {}, p = "function" == typeof b ? b : g, n = "function" == typeof c ? c : null;
+    this.put_wn2jw4$ = function(b, c) {
+      l(b);
+      r(c);
+      var d = p(b), g, k = null;
+      (g = f(h, d)) ? (d = g.getEntryForKey(b)) ? (k = d[1], d[1] = c) : g.addEntry(b, c) : (g = new a(d, b, c, n), e[e.length] = g, h[d] = g);
+      return k;
+    };
+    this.get_za3rmp$ = function(a) {
+      l(a);
+      var b = p(a);
+      if (b = f(h, b)) {
+        if (a = b.getEntryForKey(a)) {
+          return a[1];
+        }
+      }
+      return null;
+    };
+    this.containsKey_za3rmp$ = function(a) {
+      l(a);
+      var b = p(a);
+      return(b = f(h, b)) ? b.containsKey_za3rmp$(a) : !1;
+    };
+    this.containsValue_za3rmp$ = function(a) {
+      r(a);
+      for (var b = e.length;b--;) {
+        if (e[b].containsValue_za3rmp$(a)) {
+          return!0;
+        }
+      }
+      return!1;
+    };
+    this.clear = function() {
+      e.length = 0;
+      h = {};
+    };
+    this.isEmpty = function() {
+      return!e.length;
+    };
+    var q = function(a) {
+      return function() {
+        for (var b = [], c = e.length;c--;) {
+          e[c][a](b);
+        }
+        return b;
+      };
+    };
+    this._keys = q("keys");
+    this._values = q("values");
+    this._entries = q("getEntries");
+    this.values = function() {
+      for (var a = this._values(), b = a.length, c = new Kotlin.ArrayList;b--;) {
+        c.add_za3rmp$(a[b]);
+      }
+      return c;
+    };
+    this.remove_za3rmp$ = function(a) {
+      l(a);
+      var b = p(a), c = null, d = f(h, b);
+      if (d && (c = d.removeEntryForKey(a), null !== c && !d.entries.length)) {
+        a: {
+          for (a = e.length;a--;) {
+            if (d = e[a], b === d[0]) {
+              break a;
+            }
+          }
+          a = null;
+        }
+        m(e, a);
+        delete h[b];
+      }
+      return c;
+    };
+    this.size = function() {
+      for (var a = 0, b = e.length;b--;) {
+        a += e[b].entries.length;
+      }
+      return a;
+    };
+    this.each = function(a) {
+      for (var b = d._entries(), c = b.length, e;c--;) {
+        e = b[c], a(e[0], e[1]);
+      }
+    };
+    this.putAll_za3j1t$ = function(a, b) {
+      for (var c = a._entries(), e, f, g, h = c.length, k = "function" == typeof b;h--;) {
+        e = c[h], f = e[0], e = e[1], k && (g = d.get(f)) && (e = b(f, g, e)), d.put_wn2jw4$(f, e);
+      }
+    };
+    this.clone = function() {
+      var a = new u(b, c);
+      a.putAll_za3j1t$(d);
+      return a;
+    };
+    this.keySet = function() {
+      for (var a = new Kotlin.ComplexHashSet, b = this._keys(), c = b.length;c--;) {
+        a.add_za3rmp$(b[c]);
+      }
+      return a;
+    };
+  };
+  Kotlin.HashTable = u;
+})();
+Kotlin.Map = Kotlin.createClassNow();
+Kotlin.HashMap = Kotlin.createClassNow(Kotlin.Map, function() {
+  Kotlin.HashTable.call(this);
 });
-
-},{}],15:[function(require,module,exports){
-(function (process){
-'use strict';
-module.exports = (function () {
-	if (process.argv.indexOf('--no-color') !== -1) {
-		return false;
-	}
-
-	if (process.argv.indexOf('--color') !== -1) {
-		return true;
-	}
-
-	if (process.stdout && !process.stdout.isTTY) {
-		return false;
-	}
-
-	if (process.platform === 'win32') {
-		return true;
-	}
-
-	if ('COLORTERM' in process.env) {
-		return true;
-	}
-
-	if (process.env.TERM === 'dumb') {
-		return false;
-	}
-
-	if (/^screen|^xterm|^vt100|color|ansi|cygwin|linux/i.test(process.env.TERM)) {
-		return true;
-	}
-
-	return false;
+Kotlin.ComplexHashMap = Kotlin.HashMap;
+(function() {
+  var g = Kotlin.createClassNow(Kotlin.Iterator, function(e, d) {
+    this.map = e;
+    this.keys = d;
+    this.size = d.length;
+    this.index = 0;
+  }, {next:function() {
+    return this.map[this.keys[this.index++]];
+  }, hasNext:function() {
+    return this.index < this.size;
+  }}), h = Kotlin.createClassNow(Kotlin.Collection, function(e) {
+    this.map = e;
+  }, {iterator:function() {
+    return new g(this.map.map, Object.keys(this.map.map));
+  }, isEmpty:function() {
+    return 0 === this.map.$size;
+  }, contains:function(e) {
+    return this.map.containsValue_za3rmp$(e);
+  }});
+  Kotlin.PrimitiveHashMap = Kotlin.createClassNow(Kotlin.Map, function() {
+    this.$size = 0;
+    this.map = {};
+  }, {size:function() {
+    return this.$size;
+  }, isEmpty:function() {
+    return 0 === this.$size;
+  }, containsKey_za3rmp$:function(e) {
+    return void 0 !== this.map[e];
+  }, containsValue_za3rmp$:function(e) {
+    var d = this.map, a;
+    for (a in d) {
+      if (d.hasOwnProperty(a) && d[a] === e) {
+        return!0;
+      }
+    }
+    return!1;
+  }, get_za3rmp$:function(e) {
+    return this.map[e];
+  }, put_wn2jw4$:function(e, d) {
+    var a = this.map[e];
+    this.map[e] = void 0 === d ? null : d;
+    void 0 === a && this.$size++;
+    return a;
+  }, remove_za3rmp$:function(e) {
+    var d = this.map[e];
+    void 0 !== d && (delete this.map[e], this.$size--);
+    return d;
+  }, clear:function() {
+    this.$size = 0;
+    this.map = {};
+  }, putAll_za3j1t$:function(e) {
+    e = e.map;
+    for (var d in e) {
+      e.hasOwnProperty(d) && (this.map[d] = e[d], this.$size++);
+    }
+  }, keySet:function() {
+    var e = new Kotlin.PrimitiveHashSet, d = this.map, a;
+    for (a in d) {
+      d.hasOwnProperty(a) && e.add_za3rmp$(a);
+    }
+    return e;
+  }, values:function() {
+    return new h(this);
+  }, toJSON:function() {
+    return this.map;
+  }});
 })();
-
-}).call(this,require('_process'))
-},{"_process":5}],16:[function(require,module,exports){
-'use strict';
-module.exports = function (str) {
-	return typeof str === 'string' ? str.replace(/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]/g, '') : str;
-};
-
-},{}],17:[function(require,module,exports){
-/*
-	PseudoClass - JavaScript inheritance
-
-	Construction:
-		Setup and construction should happen in the construct() method.
-		The construct() method is automatically chained, so all construct() methods defined by superclass methods will be called first.
-
-	Initialization:
-		Initialziation that needs to happen after all construct() methods have been called should be done in the init() method.
-		The init() method is not automatically chained, so you must call this._super() if you intend to call the superclass' init method.
-		init() is not passed any arguments
-
-	Destruction:
-		Teardown and destruction should happen in the destruct() method. The destruct() method is also chained.
-
-	Mixins:
-		An array of mixins can be provided with the mixins[] property. An object or the prototype of a class should be provided, not a constructor.
-		Mixins can be added at any time by calling this.mixin(properties)
-
-	Usage:
-		var MyClass = Class(properties);
-		var MyClass = new Class(properties);
-		var MyClass = Class.extend(properties);
-
-	Credits:
-		Inspired by Simple JavaScript Inheritance by John Resig http://ejohn.org/
-
-	Usage differences:
-		construct() is used to setup instances and is chained so superclass construct() methods run automatically
-		destruct() is used to tear down instances. destruct() is also chained
-		init(), if defined, is called after construction is complete and is not chained
-		toString() can be defined as a string or a function
-		mixin() is provided to mix properties into an instance
-		properties.mixins as an array results in each of the provided objects being mixed in (last object wins)
-		this._super() is supported in mixins
-		properties, if defined, should be a hash of property descriptors as accepted by Object.defineProperties
-*/
-(function(global) {
-	// Extend the current context by the passed objects
-	function extendThis() {
-		var i, ni, objects, object, prop;
-		objects = arguments;
-		for (i = 0, ni = objects.length; i < ni; i++) {
-			object = objects[i];
-			for (prop in object) {
-				this[prop] = object[prop];
-			}
-		}
-
-		return this;
-	}
-
-	// Return a function that calls the specified method, passing arguments
-	function makeApplier(method) {
-		return function() {
-			return this[method].apply(this, arguments);
-		};
-	}
-
-	// Merge and define properties
-	function defineAndInheritProperties(Component, properties) {
-		var constructor,
-			descriptor,
-			property,
-			propertyDescriptors,
-			propertyDescriptorHash,
-			propertyDescriptorQueue;
-
-		// Set properties
-		Component.properties = properties;
-
-		// Traverse the chain of constructors and gather all property descriptors
-		// Build a queue of property descriptors for combination
-		propertyDescriptorHash = {};
-		constructor = Component;
-		do {
-			if (constructor.properties) {
-				for (property in constructor.properties) {
-					propertyDescriptorQueue = propertyDescriptorHash[property] || (propertyDescriptorHash[property] = []);
-					propertyDescriptorQueue.unshift(constructor.properties[property]);
-				}
-			}
-			constructor = constructor.superConstructor;
-		}
-		while (constructor);
-
-		// Combine property descriptors, allowing overriding of individual properties
-		propertyDescriptors = {};
-		for (property in propertyDescriptorHash) {
-			descriptor = propertyDescriptors[property] = extendThis.apply({}, propertyDescriptorHash[property]);
-
-			// Allow setters to be strings
-			// An additional wrapping function is used to allow monkey-patching
-			// apply is used to handle cases where the setter is called directly
-			if (typeof descriptor.set === 'string') {
-				descriptor.set = makeApplier(descriptor.set);
-			}
-			if (typeof descriptor.get === 'string') {
-				descriptor.get = makeApplier(descriptor.get);
-			}
-		}
-
-		// Store option descriptors on the constructor
-		Component.properties = propertyDescriptors;
-	}
-
-	// Used for default initialization methods
-	var noop = function() {};
-
-	// Given a function, the superTest RE will match if _super is used in the function
-	// The function will be serialized, then the serialized string will be searched for _super
-	// If the environment isn't capable of function serialization, make it so superTest.test always returns true
-	var superTest = /xyz/.test(function(){return 'xyz';}) ? /\._super\b/ : { test: function() { return true; } };
-
-	// Bind an overriding method such that it gets the overridden method as its first argument
-	var superifyDynamic = function(name, func, superPrototype) {
-		return function PseudoClass_setStaticSuper() {
-			// Store the old super
-			var previousSuper = this._super;
-
-			// Use the method from the superclass' prototype
-			// This strategy allows monkey patching (modification of superclass prototypes)
-			this._super = superPrototype[name];
-
-			// Call the actual function
-			var ret = func.apply(this, arguments);
-
-			// Restore the previous value of super
-			// This is required so that calls to methods that use _super within methods that use _super work
-			this._super = previousSuper;
-
-			return ret;
-		};
-	};
-
-	var superifyStatic = function(name, func, object) {
-		// Store a reference to the overridden function
-		var _super = object[name];
-
-		return function PseudoClass_setDynamicSuper() {
-			// Use the method stored at declaration time
-			this._super = _super;
-
-			// Call the actual function
-			return func.apply(this, arguments);
-		};
-	};
-
-	// Mix the provided properties into the current context with the ability to call overridden methods with _super()
-	var mixin = function(properties, superPrototype) {
-		// Use this instance's prototype if no prototype provided
-		superPrototype = superPrototype || this.constructor && this.constructor.prototype;
-		
-		// Copy the properties onto the new prototype
-		for (var name in properties) {
-			var value = properties[name];
-
-			// Never mix construct or destruct
-			if (name === 'construct' || name === 'destruct')
-				continue;
-
-			// Check if the property if a method that makes use of _super:
-			// 1. The value should be a function
-			// 2. The super prototype should have a function by the same name
-			// 3. The function should use this._super somewhere
-			var usesSuper = superPrototype && typeof value === 'function' && typeof superPrototype[name] === 'function' && superTest.test(value);
-
-			if (usesSuper) {
-				// Wrap the function such that this._super will be available
-				if (this.hasOwnProperty(name)) {
-					// Properties that exist directly on the object should be superified statically
-					this[name] = superifyStatic(name, value, this);
-				}
-				else {
-					// Properties that are part of the superPrototype should be superified dynamically
-					this[name] = superifyDynamic(name, value, superPrototype);
-				}
-			}
-			else {
-				// Directly assign the property
-				this[name] = value;
-			}
-		}
-	};
-
-	// The base Class implementation acts as extend alias, with the exception that it can take properties.extend as the Class to extend
-	var PseudoClass = function(properties) {
-		// If a class-like object is passed as properties.extend, just call extend on it
-		if (properties && properties.extend)
-			return properties.extend.extend(properties);
-
-		// Otherwise, just create a new class with the passed properties
-		return PseudoClass.extend(properties);
-	};
-	
-	// Add the mixin method to all classes created with PseudoClass
-	PseudoClass.prototype.mixin = mixin;
-	
-	// Creates a new PseudoClass that inherits from this class
-	// Give the function a name so it can refer to itself without arguments.callee
-	PseudoClass.extend = function extend(properties) {
-		// The constructor handles creating an instance of the class, applying mixins, and calling construct() and init() methods
-		function PseudoClass() {
-			// Optimization: Requiring the new keyword and avoiding usage of Object.create() increases performance by 5x
-			if (this instanceof PseudoClass === false) {
-				throw new Error('Cannot create instance without new operator');
-			}
-
-			// Set properties
-			var propertyDescriptors = PseudoClass.properties;
-			if (propertyDescriptors) {
-				Object.defineProperties(this, propertyDescriptors);
-			}
-
-			// Optimization: Avoiding conditionals in constructor increases performance of instantiation by 2x
-			this.construct.apply(this, arguments);
-
-			this.init();
-		}
-
-		var superConstructor = this;
-		var superPrototype = this.prototype;
-
-		// Store the superConstructor
-		// It will be accessible on an instance as follows:
-		//	instance.constructor.superConstructor
-		PseudoClass.superConstructor = superConstructor;
-
-		// Add extend() as a static method on the constructor
-		PseudoClass.extend = extend;
-
-		// Create an object with the prototype of the superclass
-		// Store the extended class' prototype as the prototype of the constructor
-		var prototype = PseudoClass.prototype = Object.create(superPrototype);
-
-		// Assign prototype.constructor to the constructor itself
-		// This allows instances to refer to this.constructor.prototype
-		// This also allows creation of new instances using instance.constructor()
-		prototype.constructor = PseudoClass;
-
-		// Store the superPrototype
-		// It will be accessible on an instance as follows:
-		//	instance.superPrototype
-		//	instance.constructor.prototype.superPrototype
-		prototype.superPrototype = superPrototype;
-
-		if (properties) {
-			// Set property descriptors aside
-			// We'll first inherit methods, then we'll apply these
-			var propertyDescriptors = properties.properties;
-			delete properties.properties;
-
-			// Mix the new properties into the class prototype
-			// This does not copy construct and destruct
-			mixin.call(prototype, properties, superPrototype);
-
-			// Mix in all the mixins
-			// This also does not copy construct and destruct
-			if (Array.isArray(properties.mixins)) {
-				for (var i = 0, ni = properties.mixins.length; i < ni; i++) {
-					// Mixins should be _super enabled, with the methods defined in the prototype as the superclass methods
-					mixin.call(prototype, properties.mixins[i], prototype);
-				}
-			}
-
-			// Define properties from this class and its parent classes
-			defineAndInheritProperties(PseudoClass, propertyDescriptors);
-
-			// Chain the construct() method (supermost executes first) if necessary
-			if (properties.construct) {
-				var construct = properties.construct;
-				if (superPrototype.construct) {
-					prototype.construct = function() {
-						superPrototype.construct.apply(this, arguments);
-						construct.apply(this, arguments);
-					};
-				}
-				else {
-					prototype.construct = construct;
-				}
-			}
-			
-			// Chain the destruct() method in reverse order (supermost executes last) if necessary
-			if (properties.destruct) {
-				var destruct = properties.destruct;
-				if (superPrototype.destruct) {
-					prototype.destruct = function() {
-						destruct.apply(this, arguments);
-						superPrototype.destruct.apply(this, arguments);
-					};
-				}
-				else {
-					prototype.destruct = destruct;
-				}
-			}
-
-			// Allow definition of toString as a string (turn it into a function)
-			if (typeof properties.toString === 'string') {
-				var className = properties.toString;
-				prototype.toString = function() { return className; };
-			}
-		}
-
-		// Define construct and init as noops if undefined
-		// This serves to avoid conditionals inside of the constructor
-		if (typeof prototype.construct !== 'function')
-			prototype.construct = noop;
-		if (typeof prototype.init !== 'function')
-			prototype.init = noop;
-
-		return PseudoClass;
-	};
-	
-	if (typeof module !== 'undefined' && module.exports) {
-		// Node.js Support
-		module.exports = PseudoClass;
-	}
-	else if (typeof global.define === 'function') {
-		(function(define) {
-			// AMD Support
-			define(function() { return PseudoClass; });
-		}(global.define));
-	}
-	else {
-		// Browser support
-		global.PseudoClass = PseudoClass;
-
-		// Don't blow away existing Class variable
-		if (!global.Class) {
-			global.Class = PseudoClass;
-		}
-	}
-}(this));
-
-},{}],18:[function(require,module,exports){
+Kotlin.Set = Kotlin.createClassNow(Kotlin.Collection);
+var SetIterator = Kotlin.createClassNow(Kotlin.Iterator, function(g) {
+  this.set = g;
+  this.keys = g.toArray();
+  this.index = 0;
+}, {next:function() {
+  return this.keys[this.index++];
+}, hasNext:function() {
+  return this.index < this.keys.length;
+}, remove:function() {
+  this.set.remove_za3rmp$(this.keys[this.index - 1]);
+}});
+Kotlin.PrimitiveHashSet = Kotlin.createClassNow(Kotlin.AbstractCollection, function() {
+  this.$size = 0;
+  this.map = {};
+}, {contains_s9cetl$:function(g) {
+  return!0 === this.map[g];
+}, iterator:function() {
+  return new SetIterator(this);
+}, size:function() {
+    return this.$size;
+}, add_za3rmp$:function(g) {
+  var h = this.map[g];
+  this.map[g] = !0;
+  if (!0 === h) {
+    return!1;
+  }
+  this.$size++;
+  return!0;
+}, remove_za3rmp$:function(g) {
+  return!0 === this.map[g] ? (delete this.map[g], this.$size--, !0) : !1;
+}, clear:function() {
+  this.$size = 0;
+  this.map = {};
+}, toArray:function() {
+  return Object.keys(this.map);
+}});
+(function() {
+  function g(h, e) {
+    var d = new Kotlin.HashTable(h, e);
+    this.addAll_xeylzf$ = Kotlin.AbstractCollection.prototype.addAll_xeylzf$;
+    this.removeAll_xeylzf$ = Kotlin.AbstractCollection.prototype.removeAll_xeylzf$;
+    this.retainAll_xeylzf$ = Kotlin.AbstractCollection.prototype.retainAll_xeylzf$;
+    this.containsAll_xeylzf$ = Kotlin.AbstractCollection.prototype.containsAll_xeylzf$;
+    this.add_za3rmp$ = function(a) {
+      return!d.put_wn2jw4$(a, !0);
+    };
+    this.toArray = function() {
+      return d._keys();
+    };
+    this.iterator = function() {
+      return new SetIterator(this);
+    };
+    this.remove_za3rmp$ = function(a) {
+      return null != d.remove_za3rmp$(a);
+    };
+    this.contains_za3rmp$ = function(a) {
+      return d.containsKey_za3rmp$(a);
+    };
+    this.clear = function() {
+      d.clear();
+    };
+    this.size = function() {
+      return d.size();
+    };
+    this.isEmpty = function() {
+      return d.isEmpty();
+    };
+    this.clone = function() {
+      var a = new g(h, e);
+      a.addAll_xeylzf$(d.keys());
+      return a;
+    };
+    this.equals = function(a) {
+      if (null === a || void 0 === a) {
+        return!1;
+      }
+      if (this.size() === a.size()) {
+        var b = this.iterator();
+        for (a = a.iterator();;) {
+          var c = b.hasNext(), d = a.hasNext();
+          if (c != d) {
+            break;
+          }
+          if (d) {
+            if (c = b.next(), d = a.next(), !Kotlin.equals(c, d)) {
+              break;
+            }
+          } else {
+            return!0;
+          }
+        }
+      }
+      return!1;
+    };
+    this.toString = function() {
+      for (var a = "[", b = this.iterator(), c = !0;b.hasNext();) {
+        c ? c = !1 : a += ", ", a += b.next();
+      }
+      return a + "]";
+    };
+    this.intersection = function(a) {
+      var b = new g(h, e);
+      a = a.values();
+      for (var c = a.length, f;c--;) {
+        f = a[c], d.containsKey_za3rmp$(f) && b.add_za3rmp$(f);
+      }
+      return b;
+    };
+    this.union = function(a) {
+      var b = this.clone();
+      a = a.values();
+      for (var c = a.length, e;c--;) {
+        e = a[c], d.containsKey_za3rmp$(e) || b.add_za3rmp$(e);
+      }
+      return b;
+    };
+    this.isSubsetOf = function(a) {
+      for (var b = d.keys(), c = b.length;c--;) {
+        if (!a.contains_za3rmp$(b[c])) {
+          return!1;
+        }
+      }
+      return!0;
+    };
+  }
+  Kotlin.HashSet = Kotlin.createClassNow(Kotlin.Set, function() {
+    g.call(this);
+  });
+  Kotlin.ComplexHashSet = Kotlin.HashSet;
+})();
+module.exports = Kotlin;
+},{}],15:[function(require,module,exports){
 (function (global){
 if (!global.Kotlin) {
     global.Kotlin = require('kevoree-kotlin');
@@ -44018,978 +44101,1036 @@ module.exports.org = {
   kevoree: Kotlin.modules['kevoree'].org.kevoree
 }
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"kevoree-kotlin":19}],19:[function(require,module,exports){
-module.exports = require('./lib/kotlin');
+},{"kevoree-kotlin":13}],16:[function(require,module,exports){
+// shim for using process in browser
 
-},{"./lib/kotlin":20}],20:[function(require,module,exports){
-'use strict';var Kotlin = {};
-(function() {
-  function g(a, b) {
-    if (null != a && null != b) {
-      for (var c in b) {
-        b.hasOwnProperty(c) && (a[c] = b[c]);
-      }
-    }
-  }
-  function h(a) {
-    for (var b = 0;b < a.length;b++) {
-      if (null != a[b] && null == a[b].$metadata$ || a[b].$metadata$.type === Kotlin.TYPE.CLASS) {
-        return a[b];
-      }
-    }
-    return null;
-  }
-  function e(a, b, c) {
-    for (var f = 0;f < b.length;f++) {
-      if (null == b[f] || null != b[f].$metadata$) {
-        var d = c(b[f]), k;
-        for (k in d) {
-          d.hasOwnProperty(k) && (!a.hasOwnProperty(k) || a[k].$classIndex$ < d[k].$classIndex$) && (a[k] = d[k]);
-        }
-      }
-    }
-  }
-  function d(a, b) {
-    var c = {};
-    c.baseClasses = null == a ? [] : Array.isArray(a) ? a : [a];
-    c.baseClass = h(c.baseClasses);
-    c.classIndex = Kotlin.newClassIndex();
-    c.functions = {};
-    c.properties = {};
-    if (null != b) {
-      for (var f in b) {
-        if (b.hasOwnProperty(f)) {
-          var d = b[f];
-          d.$classIndex$ = c.classIndex;
-          "function" === typeof d ? c.functions[f] = d : c.properties[f] = d;
-        }
-      }
-    }
-    e(c.functions, c.baseClasses, function(a) {
-      return a.$metadata$.functions;
-    });
-    e(c.properties, c.baseClasses, function(a) {
-      return a.$metadata$.properties;
-    });
-    return c;
-  }
-  function a() {
-    var a = this.object_initializer$();
-    Object.defineProperty(this, "object", {value:a});
-    return a;
-  }
-  function b(a) {
-    return "function" === typeof a ? a() : a;
-  }
-  function c(a, b) {
-    if (null != a && null == a.$metadata$ || a.$metadata$.classIndex < b.$metadata$.classIndex) {
-      return!1;
-    }
-    var f = a.$metadata$.baseClasses, d;
-    for (d = 0;d < f.length;d++) {
-      if (f[d] === b) {
-        return!0;
-      }
-    }
-    for (d = 0;d < f.length;d++) {
-      if (c(f[d], b)) {
-        return!0;
-      }
-    }
-    return!1;
-  }
-  function f(a, b) {
-    return function() {
-      if (null !== b) {
-        var c = b;
-        b = null;
-        c.call(a);
-      }
-      return a;
-    };
-  }
-  function m(a) {
-    var b = {};
-    if (null == a) {
-      return b;
-    }
-    for (var c in a) {
-      a.hasOwnProperty(c) && ("function" === typeof a[c] ? a[c].type === Kotlin.TYPE.INIT_FUN ? (a[c].className = c, Object.defineProperty(b, c, {get:a[c], configurable:!0})) : b[c] = a[c] : Object.defineProperty(b, c, a[c]));
-    }
-    return b;
-  }
-  var l = function() {
-    return function() {
-    };
-  };
-  Kotlin.TYPE = {CLASS:"class", TRAIT:"trait", OBJECT:"object", INIT_FUN:"init fun"};
-  Kotlin.classCount = 0;
-  Kotlin.newClassIndex = function() {
-    var a = Kotlin.classCount;
-    Kotlin.classCount++;
-    return a;
-  };
-  Kotlin.createClassNow = function(b, c, f, e) {
-    null == c && (c = l());
-    g(c, e);
-    b = d(b, f);
-    b.type = Kotlin.TYPE.CLASS;
-    f = null !== b.baseClass ? Object.create(b.baseClass.prototype) : {};
-    Object.defineProperties(f, b.properties);
-    g(f, b.functions);
-    f.constructor = c;
-    null != b.baseClass && (c.baseInitializer = b.baseClass);
-    c.$metadata$ = b;
-    c.prototype = f;
-    Object.defineProperty(c, "object", {get:a, configurable:!0});
-    return c;
-  };
-  Kotlin.createObjectNow = function(a, b, c) {
-    a = new (Kotlin.createClassNow(a, b, c));
-    a.$metadata$ = {type:Kotlin.TYPE.OBJECT};
-    return a;
-  };
-  Kotlin.createTraitNow = function(b, c, f) {
-    var e = function() {
-    };
-    g(e, f);
-    e.$metadata$ = d(b, c);
-    e.$metadata$.type = Kotlin.TYPE.TRAIT;
-    e.prototype = {};
-    Object.defineProperties(e.prototype, e.$metadata$.properties);
-    g(e.prototype, e.$metadata$.functions);
-    Object.defineProperty(e, "object", {get:a, configurable:!0});
-    return e;
-  };
-  Kotlin.createClass = function(a, c, f, d) {
-    function e() {
-      var k = Kotlin.createClassNow(b(a), c, f, d);
-      Object.defineProperty(this, e.className, {value:k});
-      return k;
-    }
-    e.type = Kotlin.TYPE.INIT_FUN;
-    return e;
-  };
-  Kotlin.createTrait = function(a, c, f) {
-    function d() {
-      var e = Kotlin.createTraitNow(b(a), c, f);
-      Object.defineProperty(this, d.className, {value:e});
-      return e;
-    }
-    d.type = Kotlin.TYPE.INIT_FUN;
-    return d;
-  };
-  Kotlin.createObject = function(a, c, f) {
-    return Kotlin.createObjectNow(b(a), c, f);
-  };
-  Kotlin.callGetter = function(a, b, c) {
-    return b.$metadata$.properties[c].get.call(a);
-  };
-  Kotlin.callSetter = function(a, b, c, f) {
-    b.$metadata$.properties[c].set.call(a, f);
-  };
-  Kotlin.isType = function(a, b) {
-    return null == a || null == b ? !1 : a instanceof b ? !0 : null != b && null == b.$metadata$ || b.$metadata$.type == Kotlin.TYPE.CLASS ? !1 : c(a.constructor, b);
-  };
-  Kotlin.modules = {};
-  Kotlin.definePackage = function(a, b) {
-    var c = m(b);
-    return null === a ? {value:c} : {get:f(c, a)};
-  };
-  Kotlin.defineRootPackage = function(a, b) {
-    var c = m(b);
-    c.$initializer$ = null === a ? l() : a;
-    return c;
-  };
-  Kotlin.defineModule = function(a, b) {
-    if (a in Kotlin.modules) {
-      throw Error("Module " + a + " is already defined");
-    }
-    b.$initializer$.call(b);
-    Object.defineProperty(Kotlin.modules, a, {value:b});
-  };
-})();
-(function() {
-  function g(a) {
-    return function() {
-      throw new TypeError(void 0 !== a ? "Function " + a + " is abstract" : "Function is abstract");
-    };
-  }
-  String.prototype.startsWith = function(a) {
-    return 0 === this.indexOf(a);
-  };
-  String.prototype.endsWith = function(a) {
-    return-1 !== this.indexOf(a, this.length - a.length);
-  };
-  String.prototype.contains = function(a) {
-    return-1 !== this.indexOf(a);
-  };
-  Kotlin.equals = function(a, b) {
-    return null == a ? null == b : Array.isArray(a) ? Kotlin.arrayEquals(a, b) : "object" == typeof a && void 0 !== a.equals_za3rmp$ ? a.equals_za3rmp$(b) : a === b;
-  };
-  Kotlin.toString = function(a) {
-    return null == a ? "null" : Array.isArray(a) ? Kotlin.arrayToString(a) : a.toString();
-  };
-  Kotlin.arrayToString = function(a) {
-    return "[" + a.join(", ") + "]";
-  };
-  Kotlin.intUpto = function(a, b) {
-    return new Kotlin.NumberRange(a, b);
-  };
-  Kotlin.intDownto = function(a, b) {
-    return new Kotlin.Progression(a, b, -1);
-  };
-  Kotlin.RuntimeException = Kotlin.createClassNow();
-  Kotlin.NullPointerException = Kotlin.createClassNow();
-  Kotlin.NoSuchElementException = Kotlin.createClassNow();
-  Kotlin.IllegalArgumentException = Kotlin.createClassNow();
-  Kotlin.IllegalStateException = Kotlin.createClassNow();
-  Kotlin.UnsupportedOperationException = Kotlin.createClassNow();
-  Kotlin.IOException = Kotlin.createClassNow();
-  Kotlin.throwNPE = function() {
-    throw new Kotlin.NullPointerException;
-  };
-  Kotlin.Iterator = Kotlin.createClassNow(null, null, {next:g("Iterator#next"), hasNext:g("Iterator#hasNext")});
-  var h = Kotlin.createClassNow(Kotlin.Iterator, function(a) {
-    this.array = a;
-    this.index = 0;
-  }, {next:function() {
-    return this.array[this.index++];
-  }, hasNext:function() {
-    return this.index < this.array.length;
-  }, remove:function() {
-    if (0 > this.index || this.index > this.array.length) {
-      throw new RangeError;
-    }
-    this.index--;
-    this.array.splice(this.index, 1);
-  }}), e = Kotlin.createClassNow(h, function(a) {
-    this.list = a;
-    this.size = a.size();
-    this.index = 0;
-  }, {next:function() {
-    return this.list.get(this.index++);
-  }});
-  Kotlin.Collection = Kotlin.createClassNow();
-  Kotlin.Enum = Kotlin.createClassNow(null, function() {
-    this.ordinal$ = this.name$ = void 0;
-  }, {name:function() {
-    return this.name$;
-  }, ordinal:function() {
-    return this.ordinal$;
-  }, toString:function() {
-    return this.name();
-  }});
-  (function() {
-    function a(a) {
-      return this[a];
-    }
-    function b() {
-      return this.values$;
-    }
-    Kotlin.createEnumEntries = function(c) {
-      var f = 0, d = [], e;
-      for (e in c) {
-        if (c.hasOwnProperty(e)) {
-          var g = c[e];
-          d[f] = g;
-          g.ordinal$ = f;
-          g.name$ = e;
-          f++;
-        }
-      }
-      c.values$ = d;
-      c.valueOf_61zpoe$ = c.valueOf = a; // FIX because Enum.valueOf() is called instead of valueOf_61zpoe$()
-      c.values = b;
-      return c;
-    };
-  })();
-  Kotlin.PropertyMetadata = Kotlin.createClassNow(null, function(a) {
-    this.name = a;
-  });
-  Kotlin.AbstractCollection = Kotlin.createClassNow(Kotlin.Collection, null, {addAll_xeylzf$:function(a) {
-    var b = !1;
-    for (a = a.iterator();a.hasNext();) {
-      this.add_za3rmp$(a.next()) && (b = !0);
-    }
-    return b;
-  }, removeAll_xeylzf$:function(a) {
-    for (var b = !1, c = this.iterator();c.hasNext();) {
-      a.contains_za3rmp$(c.next()) && (c.remove(), b = !0);
-    }
-    return b;
-  }, retainAll_xeylzf$:function(a) {
-    for (var b = !1, c = this.iterator();c.hasNext();) {
-      a.contains_za3rmp$(c.next()) || (c.remove(), b = !0);
-    }
-    return b;
-  }, containsAll_xeylzf$:function(a) {
-    for (a = a.iterator();a.hasNext();) {
-      if (!this.contains_za3rmp$(a.next())) {
-        return!1;
-      }
-    }
-    return!0;
-  }, isEmpty:function() {
-    return 0 === this.size();
-  }, iterator:function() {
-    return new h(this.toArray());
-  }, equals_za3rmp$:function(a) {
-    if (this.size() !== a.size()) {
-      return!1;
-    }
-    var b = this.iterator();
-    a = a.iterator();
-    for (var c = this.size();0 < c--;) {
-      if (!Kotlin.equals(b.next(), a.next())) {
-        return!1;
-      }
-    }
-    return!0;
-  }, toString:function() {
-    for (var a = "[", b = this.iterator(), c = !0, f = this.size();0 < f--;) {
-      c ? c = !1 : a += ", ", a += b.next();
-    }
-    return a + "]";
-  }, toJSON:function() {
-    return this.toArray();
-  }});
-  Kotlin.AbstractList = Kotlin.createClassNow(Kotlin.AbstractCollection, null, {iterator:function() {
-    return new e(this);
-  }, remove_za3rmp$:function(a) {
-    a = this.indexOf_za3rmp$(a);
-    return-1 !== a ? (this.remove_za3lpa$(a), !0) : !1;
-  }, contains_za3rmp$:function(a) {
-    return-1 !== this.indexOf_za3rmp$(a);
-  }});
-  Kotlin.ArrayList = Kotlin.createClassNow(Kotlin.AbstractList, function() {
-    this.array = [];
-  }, {get_za3lpa$:function(a) {
-    this.checkRange(a);
-    return this.array[a];
-  },get:function(a){return this.get_za3lpa$(a);}
-   , set_vux3hl$:function(a, b) {
-    this.checkRange(a);
-    this.array[a] = b;
-  }, size:function() {
-    return this.array.length;
-  }, iterator:function() {
-    return Kotlin.arrayIterator(this.array);
-  }, add_za3rmp$:function(a) {
-    this.array.push(a);
-    return!0;
-  }, add_vux3hl$:function(a, b) {
-    this.array.splice(a, 0, b);
-  }, addAll_xeylzf$:function(a) {
-    var b = a.iterator(), c = this.array.length;
-    for (a = a.size();0 < a--;) {
-      this.array[c++] = b.next();
-    }
-  }, remove_za3lpa$:function(a) {
-    this.checkRange(a);
-    return this.array.splice(a, 1)[0];
-  }, clear:function() {
-    this.array.length = 0;
-  }, indexOf_za3rmp$:function(a) {
-    for (var b = 0;b < this.array.length;b++) {
-      if (Kotlin.equals(this.array[b], a)) {
-        return b;
-      }
-    }
-    return-1;
-  }, lastIndexOf_za3rmp$:function(a) {
-    for (var b = this.array.length - 1;0 <= b;b--) {
-      if (Kotlin.equals(this.array[b], a)) {
-        return b;
-      }
-    }
-    return-1;
-  }, toArray:function() {
-    return this.array.slice(0);
-  }, toString:function() {
-    return "[" + this.array.join(", ") + "]";
-  }, toJSON:function() {
-    return this.array;
-  }, checkRange:function(a) {
-    if (0 > a || a >= this.array.length) {
-      throw new RangeError;
-    }
-  }});
-  Kotlin.Runnable = Kotlin.createClassNow(null, null, {run:g("Runnable#run")});
-  Kotlin.Comparable = Kotlin.createClassNow(null, null, {compareTo:g("Comparable#compareTo")});
-  Kotlin.Appendable = Kotlin.createClassNow(null, null, {append:g("Appendable#append")});
-  Kotlin.Closeable = Kotlin.createClassNow(null, null, {close:g("Closeable#close")});
-  Kotlin.safeParseInt = function(a) {
-    a = parseInt(a, 10);
-    return isNaN(a) ? null : a;
-  };
-  Kotlin.safeParseDouble = function(a) {
-    a = parseFloat(a);
-    return isNaN(a) ? null : a;
-  };
-  Kotlin.arrayEquals = function(a, b) {
-    if (a === b) {
-      return!0;
-    }
-    if (!Array.isArray(b) || a.length !== b.length) {
-      return!1;
-    }
-    for (var c = 0, f = a.length;c < f;c++) {
-      if (!Kotlin.equals(a[c], b[c])) {
-        return!1;
-      }
-    }
-    return!0;
-  };
-  Kotlin.System = function() {
-    var a = "", b = function(b) {
-      void 0 !== b && (a = null === b || "object" !== typeof b ? a + b : a + b.toString());
-    }, c = function(b) {
-      this.print(b);
-      a += "\n";
-    };
-    return{out:function() {
-      return{print:b, println:c};
-    }, output:function() {
-      return a;
-    }, flush:function() {
-      a = "";
-    }};
-  }();
-  Kotlin.println = function(a) {
-    Kotlin.System.out().println(a);
-  };
-  Kotlin.print = function(a) {
-    Kotlin.System.out().print(a);
-  };
-  Kotlin.RangeIterator = Kotlin.createClassNow(Kotlin.Iterator, function(a, b, c) {
-    this.start = a;
-    this.end = b;
-    this.increment = c;
-    this.i = a;
-  }, {next:function() {
-    var a = this.i;
-    this.i += this.increment;
-    return a;
-  }, hasNext:function() {
-    return this.i <= this.end;
-  }});
-  Kotlin.NumberRange = Kotlin.createClassNow(null, function(a, b) {
-    this.start = a;
-    this.end = b;
-    this.increment = 1;
-  }, {contains:function(a) {
-    return this.start <= a && a <= this.end;
-  }, iterator:function() {
-    return new Kotlin.RangeIterator(this.start, this.end);
-  }});
-  Kotlin.Progression = Kotlin.createClassNow(null, function(a, b, c) {
-    this.start = a;
-    this.end = b;
-    this.increment = c;
-  }, {iterator:function() {
-    return new Kotlin.RangeIterator(this.start, this.end, this.increment);
-  }});
-  Kotlin.Comparator = Kotlin.createClassNow(null, null, {compare:g("Comparator#compare")});
-  var d = Kotlin.createClassNow(Kotlin.Comparator, function(a) {
-    this.compare = a;
-  });
-  Kotlin.comparator = function(a) {
-    return new d(a);
-  };
-  Kotlin.collectionsMax = function(a, b) {
-    if (a.isEmpty()) {
-      throw Error();
-    }
-    for (var c = a.iterator(), f = c.next();c.hasNext();) {
-      var d = c.next();
-      0 > b.compare(f, d) && (f = d);
-    }
-    return f;
-  };
-  Kotlin.collectionsSort = function(a, b) {
-    var c = void 0;
-    void 0 !== b && (c = b.compare.bind(b));
-    a instanceof Array && a.sort(c);
-    for (var f = [], d = a.iterator();d.hasNext();) {
-      f.push(d.next());
-    }
-    f.sort(c);
-    c = 0;
-    for (d = f.length;c < d;c++) {
-      a.set_vux3hl$(c, f[c]);
-    }
-  };
-  Kotlin.copyToArray = function(a) {
-    var b = [];
-    for (a = a.iterator();a.hasNext();) {
-      b.push(a.next());
-    }
-    return b;
-  };
-  Kotlin.StringBuilder = Kotlin.createClassNow(null, function() {
-    this.string = "";
-  }, {append:function(a) {
-    this.string += a.toString();
-    return this;
-  }, toString:function() {
-    return this.string;
-  }});
-  Kotlin.splitString = function(a, b, c) {
-    return a.split(RegExp(b), c);
-  };
-  Kotlin.nullArray = function(a) {
-    for (var b = [];0 < a;) {
-      b[--a] = null;
-    }
-    return b;
-  };
-  Kotlin.numberArrayOfSize = function(a) {
-    return Kotlin.arrayFromFun(a, function() {
-      return 0;
-    });
-  };
-  Kotlin.charArrayOfSize = function(a) {
-    return Kotlin.arrayFromFun(a, function() {
-      return "\x00";
-    });
-  };
-  Kotlin.booleanArrayOfSize = function(a) {
-    return Kotlin.arrayFromFun(a, function() {
-      return!1;
-    });
-  };
-  Kotlin.arrayFromFun = function(a, b) {
-    for (var c = Array(a), d = 0;d < a;d++) {
-      c[d] = b(d);
-    }
-    return c;
-  };
-  Kotlin.arrayIndices = function(a) {
-    return new Kotlin.NumberRange(0, a.length - 1);
-  };
-  Kotlin.arrayIterator = function(a) {
-    return new h(a);
-  };
-  Kotlin.jsonFromTuples = function(a) {
-    for (var b = a.length, c = {};0 < b;) {
-      --b, c[a[b][0]] = a[b][1];
-    }
-    return c;
-  };
-  Kotlin.jsonAddProperties = function(a, b) {
-    for (var c in b) {
-      b.hasOwnProperty(c) && (a[c] = b[c]);
-    }
-    return a;
-  };
-})();
-(function() {
-  function g(a) {
-    if ("string" == typeof a) {
-      return a;
-    }
-    if ("function" == typeof a.hashCode) {
-      return a = a.hashCode(), "string" == typeof a ? a : g(a);
-    }
-    if ("function" == typeof a.toString) {
-      return a.toString();
-    }
-    try {
-      return String(a);
-    } catch (b) {
-      return Object.prototype.toString.call(a);
-    }
-  }
-  function h(a, b) {
-    return a.equals(b);
-  }
-  function e(a, b) {
-    return "function" == typeof b.equals ? b.equals(a) : a === b;
-  }
-  function d(a) {
-    return function(b) {
-      if (null === b) {
-        throw Error("null is not a valid " + a);
-      }
-      if ("undefined" == typeof b) {
-        throw Error(a + " must not be undefined");
-      }
-    };
-  }
-  function a(a, b, c, d) {
-    this[0] = a;
-    this.entries = [];
-    this.addEntry(b, c);
-    null !== d && (this.getEqualityFunction = function() {
-      return d;
-    });
-  }
-  function b(a) {
-    return function(b) {
-      for (var c = this.entries.length, d, f = this.getEqualityFunction(b);c--;) {
-        if (d = this.entries[c], f(b, d[0])) {
-          switch(a) {
-            case n:
-              return!0;
-            case s:
-              return d;
-            case t:
-              return[c, d[1]];
-          }
-        }
-      }
-      return!1;
-    };
-  }
-  function c(a) {
-    return function(b) {
-      for (var c = b.length, d = 0, f = this.entries.length;d < f;++d) {
-        b[c + d] = this.entries[d][a];
-      }
-    };
-  }
-  function f(b, c) {
-    var d = b[c];
-    return d && d instanceof a ? d : null;
-  }
-  var m = "function" == typeof Array.prototype.splice ? function(a, b) {
-    a.splice(b, 1);
-  } : function(a, b) {
-    var c, d, f;
-    if (b === a.length - 1) {
-      a.length = b;
+var process = module.exports = {};
+var queue = [];
+var draining = false;
+var currentQueue;
+var queueIndex = -1;
+
+function cleanUpNextTick() {
+    draining = false;
+    if (currentQueue.length) {
+        queue = currentQueue.concat(queue);
     } else {
-      for (c = a.slice(b + 1), a.length = b, d = 0, f = c.length;d < f;++d) {
-        a[b + d] = c[d];
-      }
+        queueIndex = -1;
     }
-  }, l = d("key"), r = d("value"), n = 0, s = 1, t = 2;
-  a.prototype = {getEqualityFunction:function(a) {
-    return "function" == typeof a.equals ? h : e;
-  }, getEntryForKey:b(s), getEntryAndIndexForKey:b(t), removeEntryForKey:function(a) {
-    return(a = this.getEntryAndIndexForKey(a)) ? (m(this.entries, a[0]), a[1]) : null;
-  }, addEntry:function(a, b) {
-    this.entries[this.entries.length] = [a, b];
-  }, keys:c(0), values:c(1), getEntries:function(a) {
-    for (var b = a.length, c = 0, d = this.entries.length;c < d;++c) {
-      a[b + c] = this.entries[c].slice(0);
+    if (queue.length) {
+        drainQueue();
     }
-  }, containsKey_za3rmp$:b(n), containsValue_za3rmp$:function(a) {
-    for (var b = this.entries.length;b--;) {
-      if (a === this.entries[b][1]) {
-        return!0;
-      }
+}
+
+function drainQueue() {
+    if (draining) {
+        return;
     }
-    return!1;
-  }};
-  var u = function(b, c) {
-    var d = this, e = [], h = {}, p = "function" == typeof b ? b : g, n = "function" == typeof c ? c : null;
-    this.put_wn2jw4$ = function(b, c) {
-      l(b);
-      r(c);
-      var d = p(b), g, k = null;
-      (g = f(h, d)) ? (d = g.getEntryForKey(b)) ? (k = d[1], d[1] = c) : g.addEntry(b, c) : (g = new a(d, b, c, n), e[e.length] = g, h[d] = g);
-      return k;
-    };
-    this.get_za3rmp$ = function(a) {
-      l(a);
-      var b = p(a);
-      if (b = f(h, b)) {
-        if (a = b.getEntryForKey(a)) {
-          return a[1];
-        }
-      }
-      return null;
-    };
-    this.containsKey_za3rmp$ = function(a) {
-      l(a);
-      var b = p(a);
-      return(b = f(h, b)) ? b.containsKey_za3rmp$(a) : !1;
-    };
-    this.containsValue_za3rmp$ = function(a) {
-      r(a);
-      for (var b = e.length;b--;) {
-        if (e[b].containsValue_za3rmp$(a)) {
-          return!0;
-        }
-      }
-      return!1;
-    };
-    this.clear = function() {
-      e.length = 0;
-      h = {};
-    };
-    this.isEmpty = function() {
-      return!e.length;
-    };
-    var q = function(a) {
-      return function() {
-        for (var b = [], c = e.length;c--;) {
-          e[c][a](b);
-        }
-        return b;
-      };
-    };
-    this._keys = q("keys");
-    this._values = q("values");
-    this._entries = q("getEntries");
-    this.values = function() {
-      for (var a = this._values(), b = a.length, c = new Kotlin.ArrayList;b--;) {
-        c.add_za3rmp$(a[b]);
-      }
-      return c;
-    };
-    this.remove_za3rmp$ = function(a) {
-      l(a);
-      var b = p(a), c = null, d = f(h, b);
-      if (d && (c = d.removeEntryForKey(a), null !== c && !d.entries.length)) {
-        a: {
-          for (a = e.length;a--;) {
-            if (d = e[a], b === d[0]) {
-              break a;
+    var timeout = setTimeout(cleanUpNextTick);
+    draining = true;
+
+    var len = queue.length;
+    while(len) {
+        currentQueue = queue;
+        queue = [];
+        while (++queueIndex < len) {
+            if (currentQueue) {
+                currentQueue[queueIndex].run();
             }
-          }
-          a = null;
         }
-        m(e, a);
-        delete h[b];
-      }
-      return c;
-    };
-    this.size = function() {
-      for (var a = 0, b = e.length;b--;) {
-        a += e[b].entries.length;
-      }
-      return a;
-    };
-    this.each = function(a) {
-      for (var b = d._entries(), c = b.length, e;c--;) {
-        e = b[c], a(e[0], e[1]);
-      }
-    };
-    this.putAll_za3j1t$ = function(a, b) {
-      for (var c = a._entries(), e, f, g, h = c.length, k = "function" == typeof b;h--;) {
-        e = c[h], f = e[0], e = e[1], k && (g = d.get(f)) && (e = b(f, g, e)), d.put_wn2jw4$(f, e);
-      }
-    };
-    this.clone = function() {
-      var a = new u(b, c);
-      a.putAll_za3j1t$(d);
-      return a;
-    };
-    this.keySet = function() {
-      for (var a = new Kotlin.ComplexHashSet, b = this._keys(), c = b.length;c--;) {
-        a.add_za3rmp$(b[c]);
-      }
-      return a;
-    };
-  };
-  Kotlin.HashTable = u;
-})();
-Kotlin.Map = Kotlin.createClassNow();
-Kotlin.HashMap = Kotlin.createClassNow(Kotlin.Map, function() {
-  Kotlin.HashTable.call(this);
-});
-Kotlin.ComplexHashMap = Kotlin.HashMap;
-(function() {
-  var g = Kotlin.createClassNow(Kotlin.Iterator, function(e, d) {
-    this.map = e;
-    this.keys = d;
-    this.size = d.length;
-    this.index = 0;
-  }, {next:function() {
-    return this.map[this.keys[this.index++]];
-  }, hasNext:function() {
-    return this.index < this.size;
-  }}), h = Kotlin.createClassNow(Kotlin.Collection, function(e) {
-    this.map = e;
-  }, {iterator:function() {
-    return new g(this.map.map, Object.keys(this.map.map));
-  }, isEmpty:function() {
-    return 0 === this.map.$size;
-  }, contains:function(e) {
-    return this.map.containsValue_za3rmp$(e);
-  }});
-  Kotlin.PrimitiveHashMap = Kotlin.createClassNow(Kotlin.Map, function() {
-    this.$size = 0;
-    this.map = {};
-  }, {size:function() {
-    return this.$size;
-  }, isEmpty:function() {
-    return 0 === this.$size;
-  }, containsKey_za3rmp$:function(e) {
-    return void 0 !== this.map[e];
-  }, containsValue_za3rmp$:function(e) {
-    var d = this.map, a;
-    for (a in d) {
-      if (d.hasOwnProperty(a) && d[a] === e) {
-        return!0;
-      }
+        queueIndex = -1;
+        len = queue.length;
     }
-    return!1;
-  }, get_za3rmp$:function(e) {
-    return this.map[e];
-  }, put_wn2jw4$:function(e, d) {
-    var a = this.map[e];
-    this.map[e] = void 0 === d ? null : d;
-    void 0 === a && this.$size++;
-    return a;
-  }, remove_za3rmp$:function(e) {
-    var d = this.map[e];
-    void 0 !== d && (delete this.map[e], this.$size--);
-    return d;
-  }, clear:function() {
-    this.$size = 0;
-    this.map = {};
-  }, putAll_za3j1t$:function(e) {
-    e = e.map;
-    for (var d in e) {
-      e.hasOwnProperty(d) && (this.map[d] = e[d], this.$size++);
+    currentQueue = null;
+    draining = false;
+    clearTimeout(timeout);
+}
+
+process.nextTick = function (fun) {
+    var args = new Array(arguments.length - 1);
+    if (arguments.length > 1) {
+        for (var i = 1; i < arguments.length; i++) {
+            args[i - 1] = arguments[i];
+        }
     }
-  }, keySet:function() {
-    var e = new Kotlin.PrimitiveHashSet, d = this.map, a;
-    for (a in d) {
-      d.hasOwnProperty(a) && e.add_za3rmp$(a);
+    queue.push(new Item(fun, args));
+    if (queue.length === 1 && !draining) {
+        setTimeout(drainQueue, 0);
     }
-    return e;
-  }, values:function() {
-    return new h(this);
-  }, toJSON:function() {
-    return this.map;
-  }});
-})();
-Kotlin.Set = Kotlin.createClassNow(Kotlin.Collection);
-var SetIterator = Kotlin.createClassNow(Kotlin.Iterator, function(g) {
-  this.set = g;
-  this.keys = g.toArray();
-  this.index = 0;
-}, {next:function() {
-  return this.keys[this.index++];
-}, hasNext:function() {
-  return this.index < this.keys.length;
-}, remove:function() {
-  this.set.remove_za3rmp$(this.keys[this.index - 1]);
-}});
-Kotlin.PrimitiveHashSet = Kotlin.createClassNow(Kotlin.AbstractCollection, function() {
-  this.$size = 0;
-  this.map = {};
-}, {contains_s9cetl$:function(g) {
-  return!0 === this.map[g];
-}, iterator:function() {
-  return new SetIterator(this);
-}, size:function() {
-    return this.$size;
-}, add_za3rmp$:function(g) {
-  var h = this.map[g];
-  this.map[g] = !0;
-  if (!0 === h) {
-    return!1;
+};
+
+// v8 likes predictible objects
+function Item(fun, array) {
+    this.fun = fun;
+    this.array = array;
+}
+Item.prototype.run = function () {
+    this.fun.apply(null, this.array);
+};
+process.title = 'browser';
+process.browser = true;
+process.env = {};
+process.argv = [];
+process.version = ''; // empty string to avoid regexp issues
+process.versions = {};
+
+function noop() {}
+
+process.on = noop;
+process.addListener = noop;
+process.once = noop;
+process.off = noop;
+process.removeListener = noop;
+process.removeAllListeners = noop;
+process.emit = noop;
+
+process.binding = function (name) {
+    throw new Error('process.binding is not supported');
+};
+
+process.cwd = function () { return '/' };
+process.chdir = function (dir) {
+    throw new Error('process.chdir is not supported');
+};
+process.umask = function() { return 0; };
+
+},{}],17:[function(require,module,exports){
+/*
+	PseudoClass - JavaScript inheritance
+
+	Construction:
+		Setup and construction should happen in the construct() method.
+		The construct() method is automatically chained, so all construct() methods defined by superclass methods will be called first.
+
+	Initialization:
+		Initialziation that needs to happen after all construct() methods have been called should be done in the init() method.
+		The init() method is not automatically chained, so you must call this._super() if you intend to call the superclass' init method.
+		init() is not passed any arguments
+
+	Destruction:
+		Teardown and destruction should happen in the destruct() method. The destruct() method is also chained.
+
+	Mixins:
+		An array of mixins can be provided with the mixins[] property. An object or the prototype of a class should be provided, not a constructor.
+		Mixins can be added at any time by calling this.mixin(properties)
+
+	Usage:
+		var MyClass = Class(properties);
+		var MyClass = new Class(properties);
+		var MyClass = Class.extend(properties);
+
+	Credits:
+		Inspired by Simple JavaScript Inheritance by John Resig http://ejohn.org/
+
+	Usage differences:
+		construct() is used to setup instances and is chained so superclass construct() methods run automatically
+		destruct() is used to tear down instances. destruct() is also chained
+		init(), if defined, is called after construction is complete and is not chained
+		toString() can be defined as a string or a function
+		mixin() is provided to mix properties into an instance
+		properties.mixins as an array results in each of the provided objects being mixed in (last object wins)
+		this._super() is supported in mixins
+		properties, if defined, should be a hash of property descriptors as accepted by Object.defineProperties
+*/
+(function(global) {
+	// Extend the current context by the passed objects
+	function extendThis() {
+		var i, ni, objects, object, prop;
+		objects = arguments;
+		for (i = 0, ni = objects.length; i < ni; i++) {
+			object = objects[i];
+			for (prop in object) {
+				this[prop] = object[prop];
+			}
+		}
+
+		return this;
+	}
+
+	// Return a function that calls the specified method, passing arguments
+	function makeApplier(method) {
+		return function() {
+			return this[method].apply(this, arguments);
+		};
+	}
+
+	// Merge and define properties
+	function defineAndInheritProperties(Component, properties) {
+		var constructor,
+			descriptor,
+			property,
+			propertyDescriptors,
+			propertyDescriptorHash,
+			propertyDescriptorQueue;
+
+		// Set properties
+		Component.properties = properties;
+
+		// Traverse the chain of constructors and gather all property descriptors
+		// Build a queue of property descriptors for combination
+		propertyDescriptorHash = {};
+		constructor = Component;
+		do {
+			if (constructor.properties) {
+				for (property in constructor.properties) {
+					propertyDescriptorQueue = propertyDescriptorHash[property] || (propertyDescriptorHash[property] = []);
+					propertyDescriptorQueue.unshift(constructor.properties[property]);
+				}
+			}
+			constructor = constructor.superConstructor;
+		}
+		while (constructor);
+
+		// Combine property descriptors, allowing overriding of individual properties
+		propertyDescriptors = {};
+		for (property in propertyDescriptorHash) {
+			descriptor = propertyDescriptors[property] = extendThis.apply({}, propertyDescriptorHash[property]);
+
+			// Allow setters to be strings
+			// An additional wrapping function is used to allow monkey-patching
+			// apply is used to handle cases where the setter is called directly
+			if (typeof descriptor.set === 'string') {
+				descriptor.set = makeApplier(descriptor.set);
+			}
+			if (typeof descriptor.get === 'string') {
+				descriptor.get = makeApplier(descriptor.get);
+			}
+		}
+
+		// Store option descriptors on the constructor
+		Component.properties = propertyDescriptors;
+	}
+
+	// Used for default initialization methods
+	var noop = function() {};
+
+	// Given a function, the superTest RE will match if _super is used in the function
+	// The function will be serialized, then the serialized string will be searched for _super
+	// If the environment isn't capable of function serialization, make it so superTest.test always returns true
+	var superTest = /xyz/.test(function(){return 'xyz';}) ? /\._super\b/ : { test: function() { return true; } };
+
+	// Bind an overriding method such that it gets the overridden method as its first argument
+	var superifyDynamic = function(name, func, superPrototype) {
+		return function PseudoClass_setStaticSuper() {
+			// Store the old super
+			var previousSuper = this._super;
+
+			// Use the method from the superclass' prototype
+			// This strategy allows monkey patching (modification of superclass prototypes)
+			this._super = superPrototype[name];
+
+			// Call the actual function
+			var ret = func.apply(this, arguments);
+
+			// Restore the previous value of super
+			// This is required so that calls to methods that use _super within methods that use _super work
+			this._super = previousSuper;
+
+			return ret;
+		};
+	};
+
+	var superifyStatic = function(name, func, object) {
+		// Store a reference to the overridden function
+		var _super = object[name];
+
+		return function PseudoClass_setDynamicSuper() {
+			// Use the method stored at declaration time
+			this._super = _super;
+
+			// Call the actual function
+			return func.apply(this, arguments);
+		};
+	};
+
+	// Mix the provided properties into the current context with the ability to call overridden methods with _super()
+	var mixin = function(properties, superPrototype) {
+		// Use this instance's prototype if no prototype provided
+		superPrototype = superPrototype || this.constructor && this.constructor.prototype;
+		
+		// Copy the properties onto the new prototype
+		for (var name in properties) {
+			var value = properties[name];
+
+			// Never mix construct or destruct
+			if (name === 'construct' || name === 'destruct')
+				continue;
+
+			// Check if the property if a method that makes use of _super:
+			// 1. The value should be a function
+			// 2. The super prototype should have a function by the same name
+			// 3. The function should use this._super somewhere
+			var usesSuper = superPrototype && typeof value === 'function' && typeof superPrototype[name] === 'function' && superTest.test(value);
+
+			if (usesSuper) {
+				// Wrap the function such that this._super will be available
+				if (this.hasOwnProperty(name)) {
+					// Properties that exist directly on the object should be superified statically
+					this[name] = superifyStatic(name, value, this);
+				}
+				else {
+					// Properties that are part of the superPrototype should be superified dynamically
+					this[name] = superifyDynamic(name, value, superPrototype);
+				}
+			}
+			else {
+				// Directly assign the property
+				this[name] = value;
+			}
+		}
+	};
+
+	// The base Class implementation acts as extend alias, with the exception that it can take properties.extend as the Class to extend
+	var PseudoClass = function(properties) {
+		// If a class-like object is passed as properties.extend, just call extend on it
+		if (properties && properties.extend)
+			return properties.extend.extend(properties);
+
+		// Otherwise, just create a new class with the passed properties
+		return PseudoClass.extend(properties);
+	};
+	
+	// Add the mixin method to all classes created with PseudoClass
+	PseudoClass.prototype.mixin = mixin;
+	
+	// Creates a new PseudoClass that inherits from this class
+	// Give the function a name so it can refer to itself without arguments.callee
+	PseudoClass.extend = function extend(properties) {
+		// The constructor handles creating an instance of the class, applying mixins, and calling construct() and init() methods
+		function PseudoClass() {
+			// Optimization: Requiring the new keyword and avoiding usage of Object.create() increases performance by 5x
+			if (this instanceof PseudoClass === false) {
+				throw new Error('Cannot create instance without new operator');
+			}
+
+			// Set properties
+			var propertyDescriptors = PseudoClass.properties;
+			if (propertyDescriptors) {
+				Object.defineProperties(this, propertyDescriptors);
+			}
+
+			// Optimization: Avoiding conditionals in constructor increases performance of instantiation by 2x
+			this.construct.apply(this, arguments);
+
+			this.init();
+		}
+
+		var superConstructor = this;
+		var superPrototype = this.prototype;
+
+		// Store the superConstructor
+		// It will be accessible on an instance as follows:
+		//	instance.constructor.superConstructor
+		PseudoClass.superConstructor = superConstructor;
+
+		// Add extend() as a static method on the constructor
+		PseudoClass.extend = extend;
+
+		// Create an object with the prototype of the superclass
+		// Store the extended class' prototype as the prototype of the constructor
+		var prototype = PseudoClass.prototype = Object.create(superPrototype);
+
+		// Assign prototype.constructor to the constructor itself
+		// This allows instances to refer to this.constructor.prototype
+		// This also allows creation of new instances using instance.constructor()
+		prototype.constructor = PseudoClass;
+
+		// Store the superPrototype
+		// It will be accessible on an instance as follows:
+		//	instance.superPrototype
+		//	instance.constructor.prototype.superPrototype
+		prototype.superPrototype = superPrototype;
+
+		if (properties) {
+			// Set property descriptors aside
+			// We'll first inherit methods, then we'll apply these
+			var propertyDescriptors = properties.properties;
+			delete properties.properties;
+
+			// Mix the new properties into the class prototype
+			// This does not copy construct and destruct
+			mixin.call(prototype, properties, superPrototype);
+
+			// Mix in all the mixins
+			// This also does not copy construct and destruct
+			if (Array.isArray(properties.mixins)) {
+				for (var i = 0, ni = properties.mixins.length; i < ni; i++) {
+					// Mixins should be _super enabled, with the methods defined in the prototype as the superclass methods
+					mixin.call(prototype, properties.mixins[i], prototype);
+				}
+			}
+
+			// Define properties from this class and its parent classes
+			defineAndInheritProperties(PseudoClass, propertyDescriptors);
+
+			// Chain the construct() method (supermost executes first) if necessary
+			if (properties.construct) {
+				var construct = properties.construct;
+				if (superPrototype.construct) {
+					prototype.construct = function() {
+						superPrototype.construct.apply(this, arguments);
+						construct.apply(this, arguments);
+					};
+				}
+				else {
+					prototype.construct = construct;
+				}
+			}
+			
+			// Chain the destruct() method in reverse order (supermost executes last) if necessary
+			if (properties.destruct) {
+				var destruct = properties.destruct;
+				if (superPrototype.destruct) {
+					prototype.destruct = function() {
+						destruct.apply(this, arguments);
+						superPrototype.destruct.apply(this, arguments);
+					};
+				}
+				else {
+					prototype.destruct = destruct;
+				}
+			}
+
+			// Allow definition of toString as a string (turn it into a function)
+			if (typeof properties.toString === 'string') {
+				var className = properties.toString;
+				prototype.toString = function() { return className; };
+			}
+		}
+
+		// Define construct and init as noops if undefined
+		// This serves to avoid conditionals inside of the constructor
+		if (typeof prototype.construct !== 'function')
+			prototype.construct = noop;
+		if (typeof prototype.init !== 'function')
+			prototype.init = noop;
+
+		return PseudoClass;
+	};
+	
+	if (typeof module !== 'undefined' && module.exports) {
+		// Node.js Support
+		module.exports = PseudoClass;
+	}
+	else if (typeof global.define === 'function') {
+		(function(define) {
+			// AMD Support
+			define(function() { return PseudoClass; });
+		}(global.define));
+	}
+	else {
+		// Browser support
+		global.PseudoClass = PseudoClass;
+
+		// Don't blow away existing Class variable
+		if (!global.Class) {
+			global.Class = PseudoClass;
+		}
+	}
+}(this));
+
+},{}],18:[function(require,module,exports){
+'use strict';
+module.exports = function (str) {
+	return typeof str === 'string' ? str.replace(/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]/g, '') : str;
+};
+
+},{}],19:[function(require,module,exports){
+module.exports = function isBuffer(arg) {
+  return arg && typeof arg === 'object'
+    && typeof arg.copy === 'function'
+    && typeof arg.fill === 'function'
+    && typeof arg.readUInt8 === 'function';
+}
+},{}],20:[function(require,module,exports){
+(function (process,global){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var formatRegExp = /%[sdj%]/g;
+exports.format = function(f) {
+  if (!isString(f)) {
+    var objects = [];
+    for (var i = 0; i < arguments.length; i++) {
+      objects.push(inspect(arguments[i]));
+    }
+    return objects.join(' ');
   }
-  this.$size++;
-  return!0;
-}, remove_za3rmp$:function(g) {
-  return!0 === this.map[g] ? (delete this.map[g], this.$size--, !0) : !1;
-}, clear:function() {
-  this.$size = 0;
-  this.map = {};
-}, toArray:function() {
-  return Object.keys(this.map);
-}});
-(function() {
-  function g(h, e) {
-    var d = new Kotlin.HashTable(h, e);
-    this.addAll_xeylzf$ = Kotlin.AbstractCollection.prototype.addAll_xeylzf$;
-    this.removeAll_xeylzf$ = Kotlin.AbstractCollection.prototype.removeAll_xeylzf$;
-    this.retainAll_xeylzf$ = Kotlin.AbstractCollection.prototype.retainAll_xeylzf$;
-    this.containsAll_xeylzf$ = Kotlin.AbstractCollection.prototype.containsAll_xeylzf$;
-    this.add_za3rmp$ = function(a) {
-      return!d.put_wn2jw4$(a, !0);
-    };
-    this.toArray = function() {
-      return d._keys();
-    };
-    this.iterator = function() {
-      return new SetIterator(this);
-    };
-    this.remove_za3rmp$ = function(a) {
-      return null != d.remove_za3rmp$(a);
-    };
-    this.contains_za3rmp$ = function(a) {
-      return d.containsKey_za3rmp$(a);
-    };
-    this.clear = function() {
-      d.clear();
-    };
-    this.size = function() {
-      return d.size();
-    };
-    this.isEmpty = function() {
-      return d.isEmpty();
-    };
-    this.clone = function() {
-      var a = new g(h, e);
-      a.addAll_xeylzf$(d.keys());
-      return a;
-    };
-    this.equals = function(a) {
-      if (null === a || void 0 === a) {
-        return!1;
-      }
-      if (this.size() === a.size()) {
-        var b = this.iterator();
-        for (a = a.iterator();;) {
-          var c = b.hasNext(), d = a.hasNext();
-          if (c != d) {
-            break;
-          }
-          if (d) {
-            if (c = b.next(), d = a.next(), !Kotlin.equals(c, d)) {
-              break;
-            }
-          } else {
-            return!0;
-          }
+
+  var i = 1;
+  var args = arguments;
+  var len = args.length;
+  var str = String(f).replace(formatRegExp, function(x) {
+    if (x === '%%') return '%';
+    if (i >= len) return x;
+    switch (x) {
+      case '%s': return String(args[i++]);
+      case '%d': return Number(args[i++]);
+      case '%j':
+        try {
+          return JSON.stringify(args[i++]);
+        } catch (_) {
+          return '[Circular]';
         }
-      }
-      return!1;
-    };
-    this.toString = function() {
-      for (var a = "[", b = this.iterator(), c = !0;b.hasNext();) {
-        c ? c = !1 : a += ", ", a += b.next();
-      }
-      return a + "]";
-    };
-    this.intersection = function(a) {
-      var b = new g(h, e);
-      a = a.values();
-      for (var c = a.length, f;c--;) {
-        f = a[c], d.containsKey_za3rmp$(f) && b.add_za3rmp$(f);
-      }
-      return b;
-    };
-    this.union = function(a) {
-      var b = this.clone();
-      a = a.values();
-      for (var c = a.length, e;c--;) {
-        e = a[c], d.containsKey_za3rmp$(e) || b.add_za3rmp$(e);
-      }
-      return b;
-    };
-    this.isSubsetOf = function(a) {
-      for (var b = d.keys(), c = b.length;c--;) {
-        if (!a.contains_za3rmp$(b[c])) {
-          return!1;
-        }
-      }
-      return!0;
-    };
-  }
-  Kotlin.HashSet = Kotlin.createClassNow(Kotlin.Set, function() {
-    g.call(this);
+      default:
+        return x;
+    }
   });
-  Kotlin.ComplexHashSet = Kotlin.HashSet;
-})();
-module.exports = Kotlin;
-},{}]},{},[1])(1)
+  for (var x = args[i]; i < len; x = args[++i]) {
+    if (isNull(x) || !isObject(x)) {
+      str += ' ' + x;
+    } else {
+      str += ' ' + inspect(x);
+    }
+  }
+  return str;
+};
+
+
+// Mark that a method should not be used.
+// Returns a modified function which warns once by default.
+// If --no-deprecation is set, then it is a no-op.
+exports.deprecate = function(fn, msg) {
+  // Allow for deprecating things in the process of starting up.
+  if (isUndefined(global.process)) {
+    return function() {
+      return exports.deprecate(fn, msg).apply(this, arguments);
+    };
+  }
+
+  if (process.noDeprecation === true) {
+    return fn;
+  }
+
+  var warned = false;
+  function deprecated() {
+    if (!warned) {
+      if (process.throwDeprecation) {
+        throw new Error(msg);
+      } else if (process.traceDeprecation) {
+        console.trace(msg);
+      } else {
+        console.error(msg);
+      }
+      warned = true;
+    }
+    return fn.apply(this, arguments);
+  }
+
+  return deprecated;
+};
+
+
+var debugs = {};
+var debugEnviron;
+exports.debuglog = function(set) {
+  if (isUndefined(debugEnviron))
+    debugEnviron = process.env.NODE_DEBUG || '';
+  set = set.toUpperCase();
+  if (!debugs[set]) {
+    if (new RegExp('\\b' + set + '\\b', 'i').test(debugEnviron)) {
+      var pid = process.pid;
+      debugs[set] = function() {
+        var msg = exports.format.apply(exports, arguments);
+        console.error('%s %d: %s', set, pid, msg);
+      };
+    } else {
+      debugs[set] = function() {};
+    }
+  }
+  return debugs[set];
+};
+
+
+/**
+ * Echos the value of a value. Trys to print the value out
+ * in the best way possible given the different types.
+ *
+ * @param {Object} obj The object to print out.
+ * @param {Object} opts Optional options object that alters the output.
+ */
+/* legacy: obj, showHidden, depth, colors*/
+function inspect(obj, opts) {
+  // default options
+  var ctx = {
+    seen: [],
+    stylize: stylizeNoColor
+  };
+  // legacy...
+  if (arguments.length >= 3) ctx.depth = arguments[2];
+  if (arguments.length >= 4) ctx.colors = arguments[3];
+  if (isBoolean(opts)) {
+    // legacy...
+    ctx.showHidden = opts;
+  } else if (opts) {
+    // got an "options" object
+    exports._extend(ctx, opts);
+  }
+  // set default options
+  if (isUndefined(ctx.showHidden)) ctx.showHidden = false;
+  if (isUndefined(ctx.depth)) ctx.depth = 2;
+  if (isUndefined(ctx.colors)) ctx.colors = false;
+  if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
+  if (ctx.colors) ctx.stylize = stylizeWithColor;
+  return formatValue(ctx, obj, ctx.depth);
+}
+exports.inspect = inspect;
+
+
+// http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
+inspect.colors = {
+  'bold' : [1, 22],
+  'italic' : [3, 23],
+  'underline' : [4, 24],
+  'inverse' : [7, 27],
+  'white' : [37, 39],
+  'grey' : [90, 39],
+  'black' : [30, 39],
+  'blue' : [34, 39],
+  'cyan' : [36, 39],
+  'green' : [32, 39],
+  'magenta' : [35, 39],
+  'red' : [31, 39],
+  'yellow' : [33, 39]
+};
+
+// Don't use 'blue' not visible on cmd.exe
+inspect.styles = {
+  'special': 'cyan',
+  'number': 'yellow',
+  'boolean': 'yellow',
+  'undefined': 'grey',
+  'null': 'bold',
+  'string': 'green',
+  'date': 'magenta',
+  // "name": intentionally not styling
+  'regexp': 'red'
+};
+
+
+function stylizeWithColor(str, styleType) {
+  var style = inspect.styles[styleType];
+
+  if (style) {
+    return '\u001b[' + inspect.colors[style][0] + 'm' + str +
+           '\u001b[' + inspect.colors[style][1] + 'm';
+  } else {
+    return str;
+  }
+}
+
+
+function stylizeNoColor(str, styleType) {
+  return str;
+}
+
+
+function arrayToHash(array) {
+  var hash = {};
+
+  array.forEach(function(val, idx) {
+    hash[val] = true;
+  });
+
+  return hash;
+}
+
+
+function formatValue(ctx, value, recurseTimes) {
+  // Provide a hook for user-specified inspect functions.
+  // Check that value is an object with an inspect function on it
+  if (ctx.customInspect &&
+      value &&
+      isFunction(value.inspect) &&
+      // Filter out the util module, it's inspect function is special
+      value.inspect !== exports.inspect &&
+      // Also filter out any prototype objects using the circular check.
+      !(value.constructor && value.constructor.prototype === value)) {
+    var ret = value.inspect(recurseTimes, ctx);
+    if (!isString(ret)) {
+      ret = formatValue(ctx, ret, recurseTimes);
+    }
+    return ret;
+  }
+
+  // Primitive types cannot have properties
+  var primitive = formatPrimitive(ctx, value);
+  if (primitive) {
+    return primitive;
+  }
+
+  // Look up the keys of the object.
+  var keys = Object.keys(value);
+  var visibleKeys = arrayToHash(keys);
+
+  if (ctx.showHidden) {
+    keys = Object.getOwnPropertyNames(value);
+  }
+
+  // IE doesn't make error fields non-enumerable
+  // http://msdn.microsoft.com/en-us/library/ie/dww52sbt(v=vs.94).aspx
+  if (isError(value)
+      && (keys.indexOf('message') >= 0 || keys.indexOf('description') >= 0)) {
+    return formatError(value);
+  }
+
+  // Some type of object without properties can be shortcutted.
+  if (keys.length === 0) {
+    if (isFunction(value)) {
+      var name = value.name ? ': ' + value.name : '';
+      return ctx.stylize('[Function' + name + ']', 'special');
+    }
+    if (isRegExp(value)) {
+      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+    }
+    if (isDate(value)) {
+      return ctx.stylize(Date.prototype.toString.call(value), 'date');
+    }
+    if (isError(value)) {
+      return formatError(value);
+    }
+  }
+
+  var base = '', array = false, braces = ['{', '}'];
+
+  // Make Array say that they are Array
+  if (isArray(value)) {
+    array = true;
+    braces = ['[', ']'];
+  }
+
+  // Make functions say that they are functions
+  if (isFunction(value)) {
+    var n = value.name ? ': ' + value.name : '';
+    base = ' [Function' + n + ']';
+  }
+
+  // Make RegExps say that they are RegExps
+  if (isRegExp(value)) {
+    base = ' ' + RegExp.prototype.toString.call(value);
+  }
+
+  // Make dates with properties first say the date
+  if (isDate(value)) {
+    base = ' ' + Date.prototype.toUTCString.call(value);
+  }
+
+  // Make error with message first say the error
+  if (isError(value)) {
+    base = ' ' + formatError(value);
+  }
+
+  if (keys.length === 0 && (!array || value.length == 0)) {
+    return braces[0] + base + braces[1];
+  }
+
+  if (recurseTimes < 0) {
+    if (isRegExp(value)) {
+      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+    } else {
+      return ctx.stylize('[Object]', 'special');
+    }
+  }
+
+  ctx.seen.push(value);
+
+  var output;
+  if (array) {
+    output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
+  } else {
+    output = keys.map(function(key) {
+      return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
+    });
+  }
+
+  ctx.seen.pop();
+
+  return reduceToSingleString(output, base, braces);
+}
+
+
+function formatPrimitive(ctx, value) {
+  if (isUndefined(value))
+    return ctx.stylize('undefined', 'undefined');
+  if (isString(value)) {
+    var simple = '\'' + JSON.stringify(value).replace(/^"|"$/g, '')
+                                             .replace(/'/g, "\\'")
+                                             .replace(/\\"/g, '"') + '\'';
+    return ctx.stylize(simple, 'string');
+  }
+  if (isNumber(value))
+    return ctx.stylize('' + value, 'number');
+  if (isBoolean(value))
+    return ctx.stylize('' + value, 'boolean');
+  // For some reason typeof null is "object", so special case here.
+  if (isNull(value))
+    return ctx.stylize('null', 'null');
+}
+
+
+function formatError(value) {
+  return '[' + Error.prototype.toString.call(value) + ']';
+}
+
+
+function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
+  var output = [];
+  for (var i = 0, l = value.length; i < l; ++i) {
+    if (hasOwnProperty(value, String(i))) {
+      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+          String(i), true));
+    } else {
+      output.push('');
+    }
+  }
+  keys.forEach(function(key) {
+    if (!key.match(/^\d+$/)) {
+      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+          key, true));
+    }
+  });
+  return output;
+}
+
+
+function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
+  var name, str, desc;
+  desc = Object.getOwnPropertyDescriptor(value, key) || { value: value[key] };
+  if (desc.get) {
+    if (desc.set) {
+      str = ctx.stylize('[Getter/Setter]', 'special');
+    } else {
+      str = ctx.stylize('[Getter]', 'special');
+    }
+  } else {
+    if (desc.set) {
+      str = ctx.stylize('[Setter]', 'special');
+    }
+  }
+  if (!hasOwnProperty(visibleKeys, key)) {
+    name = '[' + key + ']';
+  }
+  if (!str) {
+    if (ctx.seen.indexOf(desc.value) < 0) {
+      if (isNull(recurseTimes)) {
+        str = formatValue(ctx, desc.value, null);
+      } else {
+        str = formatValue(ctx, desc.value, recurseTimes - 1);
+      }
+      if (str.indexOf('\n') > -1) {
+        if (array) {
+          str = str.split('\n').map(function(line) {
+            return '  ' + line;
+          }).join('\n').substr(2);
+        } else {
+          str = '\n' + str.split('\n').map(function(line) {
+            return '   ' + line;
+          }).join('\n');
+        }
+      }
+    } else {
+      str = ctx.stylize('[Circular]', 'special');
+    }
+  }
+  if (isUndefined(name)) {
+    if (array && key.match(/^\d+$/)) {
+      return str;
+    }
+    name = JSON.stringify('' + key);
+    if (name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/)) {
+      name = name.substr(1, name.length - 2);
+      name = ctx.stylize(name, 'name');
+    } else {
+      name = name.replace(/'/g, "\\'")
+                 .replace(/\\"/g, '"')
+                 .replace(/(^"|"$)/g, "'");
+      name = ctx.stylize(name, 'string');
+    }
+  }
+
+  return name + ': ' + str;
+}
+
+
+function reduceToSingleString(output, base, braces) {
+  var numLinesEst = 0;
+  var length = output.reduce(function(prev, cur) {
+    numLinesEst++;
+    if (cur.indexOf('\n') >= 0) numLinesEst++;
+    return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
+  }, 0);
+
+  if (length > 60) {
+    return braces[0] +
+           (base === '' ? '' : base + '\n ') +
+           ' ' +
+           output.join(',\n  ') +
+           ' ' +
+           braces[1];
+  }
+
+  return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
+}
+
+
+// NOTE: These type checking functions intentionally don't use `instanceof`
+// because it is fragile and can be easily faked with `Object.create()`.
+function isArray(ar) {
+  return Array.isArray(ar);
+}
+exports.isArray = isArray;
+
+function isBoolean(arg) {
+  return typeof arg === 'boolean';
+}
+exports.isBoolean = isBoolean;
+
+function isNull(arg) {
+  return arg === null;
+}
+exports.isNull = isNull;
+
+function isNullOrUndefined(arg) {
+  return arg == null;
+}
+exports.isNullOrUndefined = isNullOrUndefined;
+
+function isNumber(arg) {
+  return typeof arg === 'number';
+}
+exports.isNumber = isNumber;
+
+function isString(arg) {
+  return typeof arg === 'string';
+}
+exports.isString = isString;
+
+function isSymbol(arg) {
+  return typeof arg === 'symbol';
+}
+exports.isSymbol = isSymbol;
+
+function isUndefined(arg) {
+  return arg === void 0;
+}
+exports.isUndefined = isUndefined;
+
+function isRegExp(re) {
+  return isObject(re) && objectToString(re) === '[object RegExp]';
+}
+exports.isRegExp = isRegExp;
+
+function isObject(arg) {
+  return typeof arg === 'object' && arg !== null;
+}
+exports.isObject = isObject;
+
+function isDate(d) {
+  return isObject(d) && objectToString(d) === '[object Date]';
+}
+exports.isDate = isDate;
+
+function isError(e) {
+  return isObject(e) &&
+      (objectToString(e) === '[object Error]' || e instanceof Error);
+}
+exports.isError = isError;
+
+function isFunction(arg) {
+  return typeof arg === 'function';
+}
+exports.isFunction = isFunction;
+
+function isPrimitive(arg) {
+  return arg === null ||
+         typeof arg === 'boolean' ||
+         typeof arg === 'number' ||
+         typeof arg === 'string' ||
+         typeof arg === 'symbol' ||  // ES6 symbol
+         typeof arg === 'undefined';
+}
+exports.isPrimitive = isPrimitive;
+
+exports.isBuffer = require('./support/isBuffer');
+
+function objectToString(o) {
+  return Object.prototype.toString.call(o);
+}
+
+
+function pad(n) {
+  return n < 10 ? '0' + n.toString(10) : n.toString(10);
+}
+
+
+var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
+              'Oct', 'Nov', 'Dec'];
+
+// 26 Feb 16:19:34
+function timestamp() {
+  var d = new Date();
+  var time = [pad(d.getHours()),
+              pad(d.getMinutes()),
+              pad(d.getSeconds())].join(':');
+  return [d.getDate(), months[d.getMonth()], time].join(' ');
+}
+
+
+// log is just a thin wrapper to console.log that prepends a timestamp
+exports.log = function() {
+  console.log('%s - %s', timestamp(), exports.format.apply(exports, arguments));
+};
+
+
+/**
+ * Inherit the prototype methods from one constructor into another.
+ *
+ * The Function.prototype.inherits from lang.js rewritten as a standalone
+ * function (not on Function.prototype). NOTE: If this file is to be loaded
+ * during bootstrapping this function needs to be rewritten using some native
+ * functions as prototype setup using normal JavaScript does not work as
+ * expected during bootstrapping (see mirror.js in r114903).
+ *
+ * @param {function} ctor Constructor function which needs to inherit the
+ *     prototype.
+ * @param {function} superCtor Constructor function to inherit prototype from.
+ */
+exports.inherits = require('inherits');
+
+exports._extend = function(origin, add) {
+  // Don't do anything if add isn't an object
+  if (!add || !isObject(add)) return origin;
+
+  var keys = Object.keys(add);
+  var i = keys.length;
+  while (i--) {
+    origin[keys[i]] = add[keys[i]];
+  }
+  return origin;
+};
+
+function hasOwnProperty(obj, prop) {
+  return Object.prototype.hasOwnProperty.call(obj, prop);
+}
+
+}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"./support/isBuffer":19,"_process":16,"inherits":7}]},{},[1])(1)
 });
