@@ -254,7 +254,6 @@ KevoreeCore.prototype.deploy = function(model, callback) {
 };
 
 KevoreeCore.prototype.submitScript = function(script, callback) {
-    console.log('Core.submitScript(\''+script+'\', ...)');
     if (typeof callback !== 'function') {
         callback = function() {};
     }
@@ -305,7 +304,6 @@ KevoreeCore.prototype.submitScript = function(script, callback) {
 };
 
 KevoreeCore.prototype.processScriptQueue = function() {
-    console.log('Core.processScriptQueue...');
     if (this.scriptQueue.length > 0) {
         // create a KevScript engine
         var kevs = new KevScript();
