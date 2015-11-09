@@ -255,7 +255,13 @@ KevoreeCore.prototype.deploy = function(model, callback) {
 
 KevoreeCore.prototype.submitScript = function(script, callback) {
     if (typeof callback !== 'function') {
-        callback = function() {};
+        callback = function(err) {
+            if (err) {
+                // even if the user did not register any callback to submitScript()
+                // display the error so that he gets notified in case of error
+                this.log.error(this.toString(), err.message);
+            }
+        }.bind(this);
     }
 
     if (this.deployModel === null) {
