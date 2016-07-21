@@ -1,6 +1,6 @@
 {
   "name": "kevoree-core",
-  "version": "8.2.2",
+  "version": "9.0.0-alpha",
   "description": "Kevoree Javascript platform core",
   "author": "Maxime Tricoire <max.tricoire@gmail.com>",
   "main": "./kevoree-core.js",
@@ -23,9 +23,8 @@
   },
   "optionalDependencies": {},
   "dependencies": {
-    "async": "^1.0.0",
-    "kevoree-commons": "^2.1.1",
-    "kevoree-kevscript": "^3.1.0",
+    "async": "^2.0.0",
+    "kevoree-commons": "^2.2.1",
     "kevoree-library": "^5.0.9"
   },
   "license": "LGPL-3.0",
