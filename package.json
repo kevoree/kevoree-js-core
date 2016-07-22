@@ -1,9 +1,12 @@
 {
   "name": "kevoree-core",
-  "version": "9.0.0-alpha",
+  "version": "9.0.0-alpha.0",
   "description": "Kevoree Javascript platform core",
   "author": "Maxime Tricoire <max.tricoire@gmail.com>",
   "main": "./kevoree-core.js",
+  "scripts": {
+    "prepublish": "grunt"
+  },
   "keywords": [
     "kevoree",
     "core",
@@ -18,19 +21,14 @@
     "url": "https://github.com/kevoree/kevoree-js-core"
   },
   "devDependencies": {
-    "grunt": "^0.4.5",
-    "grunt-browserify": "^3.4.0"
+    "grunt": "^1",
+    "grunt-browserify": "^5"
   },
   "optionalDependencies": {},
   "dependencies": {
     "async": "^2.0.0",
-    "kevoree-commons": "^2.2.1",
-    "kevoree-library": "^5.0.9"
+    "kevoree-library": "next"
   },
   "license": "LGPL-3.0",
-  "homepage": "https://github.com/kevoree/kevoree-js-core",
-  "scripts": {
-    "test": "mocha",
-    "prepublish": "grunt"
-  }
+  "homepage": "https://github.com/kevoree/kevoree-js-core"
 }

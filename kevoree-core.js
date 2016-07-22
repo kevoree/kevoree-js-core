@@ -1,7 +1,6 @@
 'use strict';
 
 var kevoree = require('kevoree-library'),
-  KevoreeLogger = require('kevoree-commons').KevoreeLogger,
   async = require('async'),
   util = require('util'),
   EventEmitter = require('events').EventEmitter;
@@ -15,8 +14,7 @@ var NAME_PATTERN = /^[\w-]+$/;
  * @constructor
  */
 function KevoreeCore(kevscript, modulesPath, logger) {
-  this.log = (logger !== undefined) ? logger : new KevoreeLogger(this.toString());
-
+  this.log = logger;
   this.kevs = kevscript;
   this.stopping = false;
   this.currentModel = null;
