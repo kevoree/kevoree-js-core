@@ -6181,6 +6181,9 @@ var NAME_PATTERN = /^[\w-]+$/;
  * @constructor
  */
 function KevoreeCore(kevscript, modulesPath, logger) {
+  if (!kevscript || !modulesPath || !logger) {
+    throw new Error('KevoreeCore constructor needs a KevScript engine, modulesPath and a KevoreeLogger');
+  }
   this.log = logger;
   this.kevs = kevscript;
   this.stopping = false;
