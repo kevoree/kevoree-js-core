@@ -6305,6 +6305,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
         var core = this;
         this.checkBootstrapNode(model, function (err) {
           if (err) {
+            core.emit('error', err);
             callback(err);
           } else {
             if (core.nodeInstance) {
@@ -6323,13 +6324,14 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                 var cmdStack = [];
 
                 // executeCommand: function that save cmd to stack and executes it
-                var executeCommand = function (cmd, iteratorCallback) {
+                var executeCommand = function (cmd, cb) {
                   // save the cmd to be processed in a stack using unshift
                   // in order to add the last processed cmd at the beginning of the array
                   // => cmdStack[0] = more recently executed cmd
                   cmdStack.unshift(cmd);
 
                   // execute cmd
+                  console.log('Executing', cmd.toString(), cmd.modelElement.path());
                   cmd.execute(function (err) {
                     if (err) {
                       if (core.stopping) {
@@ -6339,7 +6341,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                         err = null;
                       }
                     }
-                    iteratorCallback(err);
+                    cb(err);
                   });
                 };
 
@@ -6535,22 +6537,25 @@ KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
 
   if (typeof (this.nodeInstance) === 'undefined' || this.nodeInstance === null) {
     this.log.debug(this.toString(), 'Start \'' + this.nodeName + '\' bootstrapping...');
-    this.bootstrapper.bootstrapNodeType(this.nodeName, model, function (err, AbstractNode) {
-      if (err) {
-        callback(err);
-        return;
-      }
+    try {
+      this.bootstrapper.bootstrapNodeType(this.nodeName, model, function (err, AbstractNode) {
+        if (err) {
+          callback(err);
+          return;
+        }
 
-      var node = model.findNodesByID(this.nodeName);
+        var node = model.findNodesByID(this.nodeName);
 
-      this.nodeInstance = new AbstractNode();
-      this.nodeInstance.setKevoreeCore(this);
-      this.nodeInstance.setName(this.nodeName);
-      this.nodeInstance.setPath(node.path());
+        this.nodeInstance = new AbstractNode();
+        this.nodeInstance.setKevoreeCore(this);
+        this.nodeInstance.setName(this.nodeName);
+        this.nodeInstance.setPath(node.path());
 
-      callback();
-    }.bind(this));
-
+        callback();
+      }.bind(this));
+    } catch (err) {
+      callback(err);
+    }
   } else {
     callback();
   }
