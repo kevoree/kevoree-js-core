@@ -164,7 +164,6 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                   cmdStack.unshift(cmd);
 
                   // execute cmd
-                  console.log('Executing', cmd.toString(), cmd.modelElement.path());
                   cmd.execute(function (err) {
                     if (err) {
                       if (core.stopping) {
