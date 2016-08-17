@@ -163,18 +163,33 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                   // => cmdStack[0] = more recently executed cmd
                   cmdStack.unshift(cmd);
 
+                  var exception;
+                  var done = false;
+
                   // execute cmd
-                  cmd.execute(function (err) {
-                    if (err) {
-                      if (core.stopping) {
-                        // log error
-                        core.log.error(cmd.toString(), 'Fail adaptation skipped: ' + err.message);
-                        // but continue adaptation because we are stopping runtime anyway
-                        err = null;
+                  try {
+                    cmd.execute(function (err) {
+                      if (!exception) {
+                        if (err) {
+                          if (core.stopping) {
+                            // log error
+                            core.log.error(cmd.toString(), 'Fail adaptation skipped: ' + err.message);
+                            // but continue adaptation because we are stopping runtime anyway
+                            err = null;
+                          }
+                        }
+                        cb(err);
+                        done = true;
                       }
+                    });
+                  } catch (err) {
+                    if (!done) {
+                      exception = err;
+                      cb(err);
+                    } else {
+                      core.log.error(core.toString(), 'The execution of ' + cmd.toString() + ' threw an exception\n' + err.stack);
                     }
-                    cb(err);
-                  });
+                  }
                 };
 
                 // rollbackCommand: function that calls undo() on cmds in the stack
@@ -377,11 +392,7 @@ KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
         }
 
         var node = model.findNodesByID(this.nodeName);
-
-        this.nodeInstance = new AbstractNode();
-        this.nodeInstance.setKevoreeCore(this);
-        this.nodeInstance.setName(this.nodeName);
-        this.nodeInstance.setPath(node.path());
+        this.nodeInstance = new AbstractNode(this, node, node.name);
 
         callback();
       }.bind(this));
