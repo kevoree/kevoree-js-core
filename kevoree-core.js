@@ -5,7 +5,7 @@ var kevoree = require('kevoree-library'),
   util = require('util'),
   EventEmitter = require('events').EventEmitter;
 
-var NAME_PATTERN = /^[\w-]+$/;
+var NAME_PATTERN = /^[\w]+$/;
 
 /**
  *
@@ -393,6 +393,35 @@ KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
 
         var node = model.findNodesByID(this.nodeName);
         this.nodeInstance = new AbstractNode(this, node, node.name);
+        var factory = new kevoree.factory.DefaultKevoreeFactory();
+        node.dictionary = factory.createDictionary().withGenerated_KMF_ID('0');
+        if (node.typeDefinition.dictionaryType) {
+          node.typeDefinition.dictionaryType.attributes.array.forEach(function (attr) {
+            if (!attr.fragmentDependant) {
+              var param = factory.createValue();
+              param.name = attr.name;
+              param.value = attr.defaultValue;
+              node.dictionary.addValues(param);
+              this.log.debug(this.toString(), 'Set default node param: '+param.name+'='+param.value);
+            }
+          }.bind(this));
+        }
+        var os = require('os');
+        if (os) {
+          var ifaces = os.networkInterfaces();
+          Object.keys(ifaces).forEach(function (ifname) {
+            var net = factory.createNetworkInfo();
+            net.name = ifname;
+            ifaces[ifname].forEach(function (iface) {
+              var val = factory.createValue();
+              val.name = iface.family.toLowerCase();
+              val.value = iface.address;
+              net.addValues(val);
+              this.log.debug(this.toString(), 'Set default node network: '+node.name+'.'+net.name+'.'+val.name+' '+val.value);
+            }.bind(this));
+            node.addNetworkInformation(net);
+          }.bind(this));
+        }
 
         callback();
       }.bind(this));

@@ -5118,7 +5118,7 @@ require=(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof requ
 
 }));
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"_process":4}],2:[function(require,module,exports){
+},{"_process":5}],2:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -5447,6 +5447,53 @@ if (typeof Object.create === 'function') {
 }
 
 },{}],4:[function(require,module,exports){
+exports.endianness = function () { return 'LE' };
+
+exports.hostname = function () {
+    if (typeof location !== 'undefined') {
+        return location.hostname
+    }
+    else return '';
+};
+
+exports.loadavg = function () { return [] };
+
+exports.uptime = function () { return 0 };
+
+exports.freemem = function () {
+    return Number.MAX_VALUE;
+};
+
+exports.totalmem = function () {
+    return Number.MAX_VALUE;
+};
+
+exports.cpus = function () { return [] };
+
+exports.type = function () { return 'Browser' };
+
+exports.release = function () {
+    if (typeof navigator !== 'undefined') {
+        return navigator.appVersion;
+    }
+    return '';
+};
+
+exports.networkInterfaces
+= exports.getNetworkInterfaces
+= function () { return {} };
+
+exports.arch = function () { return 'javascript' };
+
+exports.platform = function () { return 'browser' };
+
+exports.tmpdir = exports.tmpDir = function () {
+    return '/tmp';
+};
+
+exports.EOL = '\n';
+
+},{}],5:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -5567,14 +5614,14 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],5:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],6:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6164,7 +6211,7 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":5,"_process":4,"inherits":3}],"kevoree-core":[function(require,module,exports){
+},{"./support/isBuffer":6,"_process":5,"inherits":3}],"kevoree-core":[function(require,module,exports){
 'use strict';
 
 var kevoree = require('kevoree-library'),
@@ -6172,7 +6219,7 @@ var kevoree = require('kevoree-library'),
   util = require('util'),
   EventEmitter = require('events').EventEmitter;
 
-var NAME_PATTERN = /^[\w-]+$/;
+var NAME_PATTERN = /^[\w]+$/;
 
 /**
  *
@@ -6560,6 +6607,35 @@ KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
 
         var node = model.findNodesByID(this.nodeName);
         this.nodeInstance = new AbstractNode(this, node, node.name);
+        var factory = new kevoree.factory.DefaultKevoreeFactory();
+        node.dictionary = factory.createDictionary().withGenerated_KMF_ID('0');
+        if (node.typeDefinition.dictionaryType) {
+          node.typeDefinition.dictionaryType.attributes.array.forEach(function (attr) {
+            if (!attr.fragmentDependant) {
+              var param = factory.createValue();
+              param.name = attr.name;
+              param.value = attr.defaultValue;
+              node.dictionary.addValues(param);
+              this.log.debug(this.toString(), 'Set default node param: '+param.name+'='+param.value);
+            }
+          }.bind(this));
+        }
+        var os = require('os');
+        if (os) {
+          var ifaces = os.networkInterfaces();
+          Object.keys(ifaces).forEach(function (ifname) {
+            var net = factory.createNetworkInfo();
+            net.name = ifname;
+            ifaces[ifname].forEach(function (iface) {
+              var val = factory.createValue();
+              val.name = iface.family.toLowerCase();
+              val.value = iface.address;
+              net.addValues(val);
+              this.log.debug(this.toString(), 'Set default node network: '+node.name+'.'+net.name+'.'+val.name+' '+val.value);
+            }.bind(this));
+            node.addNetworkInformation(net);
+          }.bind(this));
+        }
 
         callback();
       }.bind(this));
@@ -6657,4 +6733,4 @@ KevoreeCore.prototype.off = function (event, listener) {
  */
 module.exports = KevoreeCore;
 
-},{"async":1,"events":2,"kevoree-library":"kevoree-library","util":6}]},{},["kevoree-core"]);
+},{"async":1,"events":2,"kevoree-library":"kevoree-library","os":4,"util":7}]},{},["kevoree-core"]);

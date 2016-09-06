@@ -17,5 +17,11 @@
   "trailing": true,
   "smarttabs": true,
   "mocha": true,
-  "globals": {}
+  "evil": true,
+  "globals": {
+    "TarGZ": true,
+    "angular": true,
+    "KevoreeCommons": true,
+    "KevoreeKevscript": true
+  }
 }

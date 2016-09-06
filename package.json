@@ -1,6 +1,6 @@
 {
   "name": "kevoree-core",
-  "version": "9.0.0-alpha.4",
+  "version": "9.0.0-alpha.5",
   "description": "Kevoree Javascript platform core",
   "author": "Maxime Tricoire <max.tricoire@gmail.com>",
   "main": "./kevoree-core.js",
@@ -22,7 +22,12 @@
   },
   "devDependencies": {
     "grunt": "^1",
-    "grunt-browserify": "^5"
+    "grunt-browserify": "^5",
+    "kevoree-commons": "next",
+    "kevoree-kevscript": "next",
+    "kevoree-validator": "^0.1.5",
+    "mocha": "^3.0.2",
+    "tiny-conf": "^1.0.0"
   },
   "optionalDependencies": {},
   "dependencies": {
