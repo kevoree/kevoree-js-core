@@ -5118,7 +5118,7 @@ require=(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof requ
 
 }));
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"_process":5}],2:[function(require,module,exports){
+},{"_process":4}],2:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -5178,8 +5178,12 @@ EventEmitter.prototype.emit = function(type) {
       er = arguments[1];
       if (er instanceof Error) {
         throw er; // Unhandled 'error' event
+      } else {
+        // At least give some kind of context to the user
+        var err = new Error('Uncaught, unspecified "error" event. (' + er + ')');
+        err.context = er;
+        throw err;
       }
-      throw TypeError('Uncaught, unspecified "error" event.');
     }
   }
 
@@ -5202,18 +5206,11 @@ EventEmitter.prototype.emit = function(type) {
         break;
       // slower
       default:
-        len = arguments.length;
-        args = new Array(len - 1);
-        for (i = 1; i < len; i++)
-          args[i - 1] = arguments[i];
+        args = Array.prototype.slice.call(arguments, 1);
         handler.apply(this, args);
     }
   } else if (isObject(handler)) {
-    len = arguments.length;
-    args = new Array(len - 1);
-    for (i = 1; i < len; i++)
-      args[i - 1] = arguments[i];
-
+    args = Array.prototype.slice.call(arguments, 1);
     listeners = handler.slice();
     len = listeners.length;
     for (i = 0; i < len; i++)
@@ -5251,7 +5248,6 @@ EventEmitter.prototype.addListener = function(type, listener) {
 
   // Check for listener leak
   if (isObject(this._events[type]) && !this._events[type].warned) {
-    var m;
     if (!isUndefined(this._maxListeners)) {
       m = this._maxListeners;
     } else {
@@ -5373,7 +5369,7 @@ EventEmitter.prototype.removeAllListeners = function(type) {
 
   if (isFunction(listeners)) {
     this.removeListener(type, listeners);
-  } else {
+  } else if (listeners) {
     // LIFO order
     while (listeners.length)
       this.removeListener(type, listeners[listeners.length - 1]);
@@ -5394,15 +5390,20 @@ EventEmitter.prototype.listeners = function(type) {
   return ret;
 };
 
+EventEmitter.prototype.listenerCount = function(type) {
+  if (this._events) {
+    var evlistener = this._events[type];
+
+    if (isFunction(evlistener))
+      return 1;
+    else if (evlistener)
+      return evlistener.length;
+  }
+  return 0;
+};
+
 EventEmitter.listenerCount = function(emitter, type) {
-  var ret;
-  if (!emitter._events || !emitter._events[type])
-    ret = 0;
-  else if (isFunction(emitter._events[type]))
-    ret = 1;
-  else
-    ret = emitter._events[type].length;
-  return ret;
+  return emitter.listenerCount(type);
 };
 
 function isFunction(arg) {
@@ -5447,55 +5448,7 @@ if (typeof Object.create === 'function') {
 }
 
 },{}],4:[function(require,module,exports){
-exports.endianness = function () { return 'LE' };
-
-exports.hostname = function () {
-    if (typeof location !== 'undefined') {
-        return location.hostname
-    }
-    else return '';
-};
-
-exports.loadavg = function () { return [] };
-
-exports.uptime = function () { return 0 };
-
-exports.freemem = function () {
-    return Number.MAX_VALUE;
-};
-
-exports.totalmem = function () {
-    return Number.MAX_VALUE;
-};
-
-exports.cpus = function () { return [] };
-
-exports.type = function () { return 'Browser' };
-
-exports.release = function () {
-    if (typeof navigator !== 'undefined') {
-        return navigator.appVersion;
-    }
-    return '';
-};
-
-exports.networkInterfaces
-= exports.getNetworkInterfaces
-= function () { return {} };
-
-exports.arch = function () { return 'javascript' };
-
-exports.platform = function () { return 'browser' };
-
-exports.tmpdir = exports.tmpDir = function () {
-    return '/tmp';
-};
-
-exports.EOL = '\n';
-
-},{}],5:[function(require,module,exports){
 // shim for using process in browser
-
 var process = module.exports = {};
 
 // cached from whatever global is present so that test runners that stub it
@@ -5506,22 +5459,84 @@ var process = module.exports = {};
 var cachedSetTimeout;
 var cachedClearTimeout;
 
+function defaultSetTimout() {
+    throw new Error('setTimeout has not been defined');
+}
+function defaultClearTimeout () {
+    throw new Error('clearTimeout has not been defined');
+}
 (function () {
-  try {
-    cachedSetTimeout = setTimeout;
-  } catch (e) {
-    cachedSetTimeout = function () {
-      throw new Error('setTimeout is not defined');
+    try {
+        if (typeof setTimeout === 'function') {
+            cachedSetTimeout = setTimeout;
+        } else {
+            cachedSetTimeout = defaultSetTimout;
+        }
+    } catch (e) {
+        cachedSetTimeout = defaultSetTimout;
     }
-  }
-  try {
-    cachedClearTimeout = clearTimeout;
-  } catch (e) {
-    cachedClearTimeout = function () {
-      throw new Error('clearTimeout is not defined');
+    try {
+        if (typeof clearTimeout === 'function') {
+            cachedClearTimeout = clearTimeout;
+        } else {
+            cachedClearTimeout = defaultClearTimeout;
+        }
+    } catch (e) {
+        cachedClearTimeout = defaultClearTimeout;
     }
-  }
 } ())
+function runTimeout(fun) {
+    if (cachedSetTimeout === setTimeout) {
+        //normal enviroments in sane situations
+        return setTimeout(fun, 0);
+    }
+    // if setTimeout wasn't available but was latter defined
+    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
+        cachedSetTimeout = setTimeout;
+        return setTimeout(fun, 0);
+    }
+    try {
+        // when when somebody has screwed with setTimeout but no I.E. maddness
+        return cachedSetTimeout(fun, 0);
+    } catch(e){
+        try {
+            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
+            return cachedSetTimeout.call(null, fun, 0);
+        } catch(e){
+            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
+            return cachedSetTimeout.call(this, fun, 0);
+        }
+    }
+
+
+}
+function runClearTimeout(marker) {
+    if (cachedClearTimeout === clearTimeout) {
+        //normal enviroments in sane situations
+        return clearTimeout(marker);
+    }
+    // if clearTimeout wasn't available but was latter defined
+    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
+        cachedClearTimeout = clearTimeout;
+        return clearTimeout(marker);
+    }
+    try {
+        // when when somebody has screwed with setTimeout but no I.E. maddness
+        return cachedClearTimeout(marker);
+    } catch (e){
+        try {
+            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
+            return cachedClearTimeout.call(null, marker);
+        } catch (e){
+            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
+            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
+            return cachedClearTimeout.call(this, marker);
+        }
+    }
+
+
+
+}
 var queue = [];
 var draining = false;
 var currentQueue;
@@ -5546,7 +5561,7 @@ function drainQueue() {
     if (draining) {
         return;
     }
-    var timeout = cachedSetTimeout(cleanUpNextTick);
+    var timeout = runTimeout(cleanUpNextTick);
     draining = true;
 
     var len = queue.length;
@@ -5563,7 +5578,7 @@ function drainQueue() {
     }
     currentQueue = null;
     draining = false;
-    cachedClearTimeout(timeout);
+    runClearTimeout(timeout);
 }
 
 process.nextTick = function (fun) {
@@ -5575,7 +5590,7 @@ process.nextTick = function (fun) {
     }
     queue.push(new Item(fun, args));
     if (queue.length === 1 && !draining) {
-        cachedSetTimeout(drainQueue, 0);
+        runTimeout(drainQueue);
     }
 };
 
@@ -5614,14 +5629,14 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],6:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],7:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6211,7 +6226,7 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":6,"_process":5,"inherits":3}],"kevoree-core":[function(require,module,exports){
+},{"./support/isBuffer":5,"_process":4,"inherits":3}],"kevoree-core":[function(require,module,exports){
 'use strict';
 
 var kevoree = require('kevoree-library'),
@@ -6591,7 +6606,7 @@ KevoreeCore.prototype.processScriptQueue = function () {
  * @param model
  * @param callback
  */
-KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
+KevoreeCore.prototype.checkBootstrapNode = function (deployModel, callback) {
   callback = callback || function () {
     console.warn('No callback defined for checkBootstrapNode(model, cb) in KevoreeCore');
   };
@@ -6599,41 +6614,30 @@ KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
   if (typeof (this.nodeInstance) === 'undefined' || this.nodeInstance === null) {
     this.log.debug(this.toString(), 'Start \'' + this.nodeName + '\' bootstrapping...');
     try {
-      this.bootstrapper.bootstrapNodeType(this.nodeName, model, function (err, AbstractNode) {
+      this.bootstrapper.bootstrapNodeType(this.nodeName, deployModel, function (err, AbstractNode) {
         if (err) {
           callback(err);
           return;
         }
 
-        var node = model.findNodesByID(this.nodeName);
-        this.nodeInstance = new AbstractNode(this, node, node.name);
+        var deployNode = deployModel.findNodesByID(this.nodeName);
+        var currentNode = this.currentModel.findNodesByID(this.nodeName);
+
+        // create node instance
+        this.nodeInstance = new AbstractNode(this, deployNode, this.nodeName);
+
+        // bootstrap node dictionary
         var factory = new kevoree.factory.DefaultKevoreeFactory();
-        node.dictionary = factory.createDictionary().withGenerated_KMF_ID('0');
-        if (node.typeDefinition.dictionaryType) {
-          node.typeDefinition.dictionaryType.attributes.array.forEach(function (attr) {
+        currentNode.dictionary = factory.createDictionary().withGenerated_KMF_ID('0');
+        if (deployNode.typeDefinition.dictionaryType) {
+          deployNode.typeDefinition.dictionaryType.attributes.array.forEach(function (attr) {
             if (!attr.fragmentDependant) {
               var param = factory.createValue();
               param.name = attr.name;
               param.value = attr.defaultValue;
-              node.dictionary.addValues(param);
+              currentNode.dictionary.addValues(param);
               this.log.debug(this.toString(), 'Set default node param: '+param.name+'='+param.value);
             }
-          }.bind(this));
-        }
-        var os = require('os');
-        if (os) {
-          var ifaces = os.networkInterfaces();
-          Object.keys(ifaces).forEach(function (ifname) {
-            var net = factory.createNetworkInfo();
-            net.name = ifname;
-            ifaces[ifname].forEach(function (iface) {
-              var val = factory.createValue();
-              val.name = iface.family.toLowerCase();
-              val.value = iface.address;
-              net.addValues(val);
-              this.log.debug(this.toString(), 'Set default node network: '+node.name+'.'+net.name+'.'+val.name+' '+val.value);
-            }.bind(this));
-            node.addNetworkInformation(net);
           }.bind(this));
         }
 
@@ -6733,4 +6737,4 @@ KevoreeCore.prototype.off = function (event, listener) {
  */
 module.exports = KevoreeCore;
 
-},{"async":1,"events":2,"kevoree-library":"kevoree-library","os":4,"util":7}]},{},["kevoree-core"]);
+},{"async":1,"events":2,"kevoree-library":"kevoree-library","util":6}]},{},["kevoree-core"]);

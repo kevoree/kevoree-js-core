@@ -377,7 +377,7 @@ KevoreeCore.prototype.processScriptQueue = function () {
  * @param model
  * @param callback
  */
-KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
+KevoreeCore.prototype.checkBootstrapNode = function (deployModel, callback) {
   callback = callback || function () {
     console.warn('No callback defined for checkBootstrapNode(model, cb) in KevoreeCore');
   };
@@ -385,41 +385,30 @@ KevoreeCore.prototype.checkBootstrapNode = function (model, callback) {
   if (typeof (this.nodeInstance) === 'undefined' || this.nodeInstance === null) {
     this.log.debug(this.toString(), 'Start \'' + this.nodeName + '\' bootstrapping...');
     try {
-      this.bootstrapper.bootstrapNodeType(this.nodeName, model, function (err, AbstractNode) {
+      this.bootstrapper.bootstrapNodeType(this.nodeName, deployModel, function (err, AbstractNode) {
         if (err) {
           callback(err);
           return;
         }
 
-        var node = model.findNodesByID(this.nodeName);
-        this.nodeInstance = new AbstractNode(this, node, node.name);
+        var deployNode = deployModel.findNodesByID(this.nodeName);
+        var currentNode = this.currentModel.findNodesByID(this.nodeName);
+
+        // create node instance
+        this.nodeInstance = new AbstractNode(this, deployNode, this.nodeName);
+
+        // bootstrap node dictionary
         var factory = new kevoree.factory.DefaultKevoreeFactory();
-        node.dictionary = factory.createDictionary().withGenerated_KMF_ID('0');
-        if (node.typeDefinition.dictionaryType) {
-          node.typeDefinition.dictionaryType.attributes.array.forEach(function (attr) {
+        currentNode.dictionary = factory.createDictionary().withGenerated_KMF_ID('0');
+        if (deployNode.typeDefinition.dictionaryType) {
+          deployNode.typeDefinition.dictionaryType.attributes.array.forEach(function (attr) {
             if (!attr.fragmentDependant) {
               var param = factory.createValue();
               param.name = attr.name;
               param.value = attr.defaultValue;
-              node.dictionary.addValues(param);
+              currentNode.dictionary.addValues(param);
               this.log.debug(this.toString(), 'Set default node param: '+param.name+'='+param.value);
             }
-          }.bind(this));
-        }
-        var os = require('os');
-        if (os) {
-          var ifaces = os.networkInterfaces();
-          Object.keys(ifaces).forEach(function (ifname) {
-            var net = factory.createNetworkInfo();
-            net.name = ifname;
-            ifaces[ifname].forEach(function (iface) {
-              var val = factory.createValue();
-              val.name = iface.family.toLowerCase();
-              val.value = iface.address;
-              net.addValues(val);
-              this.log.debug(this.toString(), 'Set default node network: '+node.name+'.'+net.name+'.'+val.name+' '+val.value);
-            }.bind(this));
-            node.addNetworkInformation(net);
           }.bind(this));
         }
 
