@@ -1,7 +1,7 @@
 'use strict';
 
 var kevoree = require('kevoree-library'),
-  async = require('async'),
+  eachSeries = require('async/eachSeries'),
   util = require('util'),
   EventEmitter = require('events').EventEmitter;
 
@@ -202,7 +202,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                 };
 
                 // execute each command synchronously
-                async.eachSeries(adaptations, executeCommand, function (err) {
+                eachSeries(adaptations, executeCommand, function (err) {
                   if (err) {
                     err.message = 'Something went wrong while processing adaptations.\n' + err.message;
                     core.log.error(core.toString(), err.stack);
@@ -215,7 +215,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                       core.log.info(core.toString(), 'Rollbacking to previous model...');
 
                       // rollback process
-                      async.eachSeries(cmdStack, rollbackCommand, function (err) {
+                      eachSeries(cmdStack, rollbackCommand, function (err) {
                         if (err) {
                           // something went wrong while rollbacking
                           err.message = 'Something went wrong while rollbacking. Process will exit.\n' + err.message;
