@@ -4,7 +4,6 @@ angular.module('app', [])
   .controller('Controller', function ($scope, $timeout) {
     $scope.logs = [];
 
-    var Core = require('kevoree-core');
     var conf = require('tiny-conf');
 
     conf.set('registry', {
@@ -61,7 +60,7 @@ angular.module('app', [])
     };
 
     var kevs = new KevoreeKevscript(logger);
-    var core = new Core(kevs, '__FAKE_BROWSER_NODE_MODULES', logger);
+    var core = new KevoreeCore(kevs, '__FAKE_BROWSER_NODE_MODULES', logger);
     core.setBootstrapper(new KevoreeCommons.Bootstrapper(logger, {
       resolve: function (du, forceInstall, callback) {
         logger.debug(this.toString(), 'resolving ' + du.name + '@' + du.version + '...');
