@@ -32,3 +32,6 @@ bower_components
 
 # IntelliJ IDEA
 .idea
+
+yarn-error.log
+yarn.lock

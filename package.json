@@ -1,6 +1,6 @@
 {
   "name": "kevoree-core",
-  "version": "9.0.0-alpha.9",
+  "version": "9.0.0-alpha.10",
   "description": "Kevoree Javascript platform core",
   "author": "Maxime Tricoire <max.tricoire@gmail.com>",
   "main": "./kevoree-core.js",
@@ -25,13 +25,13 @@
     "kevoree-kevscript": "next",
     "kevoree-validator": "^0.1.5",
     "mocha": "^3.0.2",
-    "tiny-conf": "^1.0.0"
+    "tiny-conf": "^1.0.0",
+    "webpack": "^1.13.3"
   },
   "optionalDependencies": {},
   "dependencies": {
     "async": "^2.0.0",
-    "kevoree-library": "next",
-    "webpack": "^1.13.2"
+    "kevoree-library": "next"
   },
   "license": "LGPL-3.0",
   "homepage": "https://github.com/kevoree/kevoree-js-core"

@@ -4,9 +4,7 @@ angular.module('app', [])
   .controller('Controller', function ($scope, $timeout) {
     $scope.logs = [];
 
-    var conf = require('tiny-conf');
-
-    conf.set('registry', {
+    TinyConf.set('registry', {
       host: 'kevoree.braindead.fr',
       port: 443,
       ssl: true,
@@ -59,6 +57,16 @@ angular.module('app', [])
       }
     };
 
+    var KevoreeModuleLoader = {
+      modules: {},
+      register: function (name, version, module) {
+        this.modules[name+'@'+version] = module;
+      },
+      require: function (name, version) {
+        return this.modules[name+'@'+version];
+      }
+    };
+
     var kevs = new KevoreeKevscript(logger);
     var core = new KevoreeCore(kevs, '__FAKE_BROWSER_NODE_MODULES', logger);
     core.setBootstrapper(new KevoreeCommons.Bootstrapper(logger, {
@@ -76,7 +84,7 @@ angular.module('app', [])
             }
             if (file) {
               eval(`//# sourceURL=${du.name + '@' + du.version}\n${file.data}`);
-              callback(null, require(du.name));
+              callback(null, KevoreeModuleLoader.require(du.name, du.version));
             } else {
               callback(new Error(`Unable to find bundle browser/${du.name}.js in ${du.name}@${du.version}`));
             }

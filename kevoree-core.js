@@ -142,11 +142,18 @@ KevoreeCore.prototype.deploy = function (model, callback) {
             callback(err);
           } else {
             if (core.nodeInstance) {
+              var error;
               try {
+
                 // given model is defined and not null
                 var factory = new kevoree.factory.DefaultKevoreeFactory();
                 // clone model so that adaptations won't modify the current one
                 var cloner = factory.createModelCloner();
+                console.log(JSON.stringify(
+                  JSON.parse(factory.createJSONSerializer().serialize(model)),
+                  null,
+                  2
+                ));
                 core.deployModel = cloner.clone(model, true);
                 // set it read-only to ensure adaptations consistency
                 core.deployModel.setRecursiveReadOnly();
@@ -163,42 +170,39 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                   // => cmdStack[0] = more recently executed cmd
                   cmdStack.unshift(cmd);
 
-                  var exception;
-                  var done = false;
-
                   // execute cmd
-                  try {
+                  new Promise(function (resolve, reject) {
                     cmd.execute(function (err) {
-                      if (!exception) {
-                        if (err) {
-                          if (core.stopping) {
-                            // log error
-                            core.log.error(cmd.toString(), 'Fail adaptation skipped: ' + err.message);
-                            // but continue adaptation because we are stopping runtime anyway
-                            err = null;
-                          }
-                        }
-                        cb(err);
-                        done = true;
+                      if (err) {
+                        reject(err);
+                      } else {
+                        resolve();
                       }
                     });
-                  } catch (err) {
-                    if (!done) {
-                      exception = err;
-                      cb(err);
-                    } else {
-                      core.log.error(core.toString(), 'The execution of ' + cmd.toString() + ' threw an exception\n' + err.stack);
-                    }
-                  }
+                  }).then(cb)
+                    .catch(function (err) {
+                      if (core.stopping) {
+                        // core is stopping, log error and continue anyway
+                        core.log.error(cmd.toString(), 'Skip failed adaptation: ' + err.message);
+                        cb();
+                      } else {
+                        cb(err);
+                      }
+                    });
                 };
 
                 // rollbackCommand: function that calls undo() on cmds in the stack
                 var rollbackCommand = function (cmd, iteratorCallback) {
-                  try {
-                    cmd.undo(iteratorCallback);
-                  } catch (err) {
-                    iteratorCallback(err);
-                  }
+                  new Promise(function (resolve, reject) {
+                    cmd.undo(function (err) {
+                      if (err) {
+                        reject(err);
+                      } else {
+                        resolve();
+                      }
+                    });
+                  }).then(iteratorCallback)
+                    .catch(iteratorCallback);
                 };
 
                 // execute each command synchronously
@@ -210,7 +214,9 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                       core.log.warn(core.toString(), 'Shutting down Kevoree because first deployment failed...');
                       core.deployModel = null;
                       core.stop();
-                      callback(err);
+                      process.nextTick(function () {
+                        callback(err);
+                      });
                     } else {
                       core.log.info(core.toString(), 'Rollbacking to previous model...');
 
@@ -240,7 +246,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                     // reset deployModel
                     core.deployModel = null;
                     // adaptations succeed : woot
-                    core.log.info(core.toString(), 'Model deployed successfully: ' + adaptations.length + ' adaptations (' + (new Date().getTime() - start) + 'ms)');
+                    core.log.info(core.toString(), (core.stopping ? 'Stop model' : 'Model') + ' deployed successfully: ' + adaptations.length + ' adaptations (' + (new Date().getTime() - start) + 'ms)');
                     // all good :)
                     // process script queue if anyway
                     core.processScriptQueue();
@@ -250,12 +256,12 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                     callback();
                   }
                 });
-              } catch (e) {
-                core.log.error(core.toString(), 'Deployment failed.\n' + e.stack);
-                core.deployModel = null;
-                callback(e);
+              } catch (err) {
+                error = err;
+                core.log.error(core.toString(), error.stack);
               }
 
+              callback(error);
             } else {
               callback(new Error('There is no instance to bootstrap on'));
             }
@@ -384,13 +390,14 @@ KevoreeCore.prototype.checkBootstrapNode = function (deployModel, callback) {
 
   if (typeof (this.nodeInstance) === 'undefined' || this.nodeInstance === null) {
     this.log.debug(this.toString(), 'Start \'' + this.nodeName + '\' bootstrapping...');
-    try {
-      this.bootstrapper.bootstrapNodeType(this.nodeName, deployModel, function (err, AbstractNode) {
-        if (err) {
-          callback(err);
-          return;
-        }
+    this.bootstrapper.bootstrapNodeType(this.nodeName, deployModel, function (err, AbstractNode) {
+      if (err) {
+        callback(err);
+        return;
+      }
 
+      var error;
+      try {
         var deployNode = deployModel.findNodesByID(this.nodeName);
         var currentNode = this.currentModel.findNodesByID(this.nodeName);
 
@@ -411,12 +418,12 @@ KevoreeCore.prototype.checkBootstrapNode = function (deployModel, callback) {
             }
           }.bind(this));
         }
+      } catch (err) {
+        error = err;
+      }
 
-        callback();
-      }.bind(this));
-    } catch (err) {
-      callback(err);
-    }
+      callback(error);
+    }.bind(this));
   } else {
     callback();
   }
