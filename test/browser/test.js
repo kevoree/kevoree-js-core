@@ -15,7 +15,7 @@ angular.module('app', [])
     });
 
     var DEFAULT_TAG = 'BrowserTest';
-    var kLogger = new KevoreeCommons.Logger(DEFAULT_TAG);
+    var kLogger = new KevoreeCommons.KevoreeLogger(DEFAULT_TAG);
     function log(type) {
       return function (tag, msg) {
         if (!msg) {
@@ -57,7 +57,7 @@ angular.module('app', [])
       }
     };
 
-    var KevoreeModuleLoader = {
+    var KevoreeModuleLoader = window.KevoreeModuleLoader = {
       modules: {},
       register: function (name, version, module) {
         this.modules[name+'@'+version] = module;
@@ -72,23 +72,19 @@ angular.module('app', [])
     core.setBootstrapper(new KevoreeCommons.Bootstrapper(logger, {
       resolve: function (du, forceInstall, callback) {
         logger.debug(this.toString(), 'resolving ' + du.name + '@' + du.version + '...');
-        TarGZ.load(
-          `http://registry.npmjs.org/${du.name}/-/${du.name}-${du.version}.tgz`,
-          function (files) {
-            var file;
-            for (var i = 0; i < files.length; i++) {
-              if (files[i].filename === `package/browser/${du.name}.js`) {
-                file = files[i];
-                break;
-              }
-            }
-            if (file) {
-              eval(`//# sourceURL=${du.name + '@' + du.version}\n${file.data}`);
-              callback(null, KevoreeModuleLoader.require(du.name, du.version));
-            } else {
-              callback(new Error(`Unable to find bundle browser/${du.name}.js in ${du.name}@${du.version}`));
-            }
-          });
+        var srcPath = `https://unpkg.com/${du.name}@${du.version}/browser/${du.name}.js`;
+        var script = document.createElement('script');
+        script.setAttribute('src', srcPath);
+        script.async = true;
+        script.onload = function () {
+          document.body.removeChild(script);
+          callback(null, KevoreeModuleLoader.require(du.name, du.version));
+        };
+        script.onerror = function () {
+          document.body.removeChild(script);
+          callback(new Error(`Unable to load script ${srcPath}`));
+        };
+        document.body.appendChild(script);
       },
       uninstall: function (du, callback) {
         logger.debug(this.toString(), 'uninstalling ' + du.name + '@' + du.version + '...');
@@ -99,15 +95,15 @@ angular.module('app', [])
       }
     }));
 
-    core.start('testNode');
+    core.start('node0');
 
-    var script = 'add testNode, node0: JavascriptNode/LATEST/LATEST\n' +
+    var script = 'add node0: JavascriptNode/LATEST/LATEST\n' +
+      'set node0.logLevel = "DEBUG"\n' +
       'add sync: RemoteWSGroup/LATEST/LATEST\n' +
-      'set testNode.logLevel = "DEBUG"\n' +
+      'attach node0 sync\n' +
       'set sync.host = "ws.kevoree.org"\n' +
-      'set sync.path = "max-test"\n' +
-      'attach testNode sync\n' +
-      'network node0.ip.lo localhost';
+      'set sync.path = "1235484945645"\n';
+    log('info')('Runtime', 'Starting runtime using:\n' + script);
     kevs.parse(script, function (err, model) {
       if (err) {
         log('error')('KevScript', err.message);

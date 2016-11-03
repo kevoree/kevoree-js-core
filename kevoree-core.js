@@ -149,11 +149,6 @@ KevoreeCore.prototype.deploy = function (model, callback) {
                 var factory = new kevoree.factory.DefaultKevoreeFactory();
                 // clone model so that adaptations won't modify the current one
                 var cloner = factory.createModelCloner();
-                console.log(JSON.stringify(
-                  JSON.parse(factory.createJSONSerializer().serialize(model)),
-                  null,
-                  2
-                ));
                 core.deployModel = cloner.clone(model, true);
                 // set it read-only to ensure adaptations consistency
                 core.deployModel.setRecursiveReadOnly();
