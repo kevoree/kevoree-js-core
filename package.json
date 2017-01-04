@@ -5,7 +5,8 @@
   "author": "Maxime Tricoire <max.tricoire@gmail.com>",
   "main": "./kevoree-core.js",
   "scripts": {
-    "prepublish": "webpack",
+		"lint": "eslint kevoree-core.js",
+    "prepublish": "npm run lint && webpack",
     "test": "mocha test/server"
   },
   "keywords": [
