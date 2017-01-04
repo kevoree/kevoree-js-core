@@ -5,13 +5,9 @@ angular.module('app', [])
     $scope.logs = [];
 
     TinyConf.set('registry', {
-      host: 'kevoree.braindead.fr',
+      host: 'registry.kevoree.org',
       port: 443,
-      ssl: true,
-      oauth: {
-        client_id: 'kevoree_registryapp',
-        client_secret: 'kevoree_registryapp_secret'
-      }
+      ssl: true
     });
 
     var DEFAULT_TAG = 'BrowserTest';
@@ -87,8 +83,8 @@ angular.module('app', [])
         document.body.appendChild(script);
       },
       uninstall: function (du, callback) {
-        logger.debug(this.toString(), 'uninstalling ' + du.name + '@' + du.version + '...');
-        callback(new Error('Not impletemented yet'));
+        logger.debug(this.toString(), 'uninstalling ' + du.name + '@' + du.version + '... (does nothing in browser ...)');
+        callback();
       },
       toString: function () {
         return 'BrowserResolver';

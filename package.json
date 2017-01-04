@@ -1,11 +1,12 @@
 {
   "name": "kevoree-core",
-  "version": "9.0.0",
+  "version": "9.0.1",
   "description": "Kevoree Javascript platform core",
   "author": "Maxime Tricoire <max.tricoire@gmail.com>",
   "main": "./kevoree-core.js",
   "scripts": {
-    "prepublish": "webpack"
+    "prepublish": "webpack",
+    "test": "mocha test/server"
   },
   "keywords": [
     "kevoree",
@@ -22,18 +23,29 @@
   },
   "devDependencies": {
     "kevoree-commons": "^3.0.0",
-    "kevoree-kevscript": "^4.0.0",
+    "kevoree-kevscript": "^4.0.4",
+    "kevoree-node-javascript": "^5.4.0-beta.3",
     "kevoree-registry-api": "^1.7.6",
-    "kevoree-validator": "^0.1.14",
-    "mocha": "^3.0.2",
+    "kevoree-validator": "^0.1.15",
+    "mocha": "^3.2.0",
     "tiny-conf": "^1.0.4",
-    "webpack": "^1.13.3"
+    "webpack": "^1.14.0"
   },
   "optionalDependencies": {},
   "dependencies": {
-    "async": "^2.0.0",
     "kevoree-library": "^5.0.10"
   },
   "license": "LGPL-3.0",
-  "homepage": "https://github.com/kevoree/kevoree-js-core"
+  "homepage": "https://github.com/kevoree/kevoree-js-core",
+  "eslintConfig": {
+    "env": {
+      "node": true
+    },
+    "extends": [
+      "eslint:recommended"
+    ],
+    "globals": {
+      "Promise": true
+    }
+  }
 }
