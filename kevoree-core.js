@@ -420,9 +420,12 @@ KevoreeCore.prototype.checkBootstrapNode = function (deployModel, callback) {
 								if (!attr.fragmentDependant) {
 									var param = factory.createValue();
 									param.name = attr.name;
-									param.value = attr.defaultValue;
-									currentNode.dictionary.addValues(param);
-									self.log.debug(self.toString(), 'Set default node param: ' + param.name + '=' + param.value);
+									var currVal = deployNode.dictionary.findValuesByID(param.name);
+									if (!currVal) {
+										param.value = attr.defaultValue;
+										currentNode.dictionary.addValues(param);
+										self.log.debug(self.toString(), 'Set default node param: ' + param.name + '=' + param.value);
+									}
 								}
 							});
 						}
