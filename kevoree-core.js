@@ -146,7 +146,6 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 					} else {
 						if (self.nodeInstance) {
 							var adaptations;
-							var error;
 							try {
 								// given model is defined and not null
 								var factory = new kevoree.factory.DefaultKevoreeFactory();
@@ -159,104 +158,116 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 								var diffSeq = factory.createModelCompare().diff(self.currentModel, self.deployModel);
 								// ask the node platform to create the needed adaptation primitives
 								adaptations = self.nodeInstance.processTraces(diffSeq, self.deployModel);
-							} catch (err) {
-								error = err;
-								self.log.error(self.toString(), error.stack);
-							}
 
-							var executedCmds = [];
-							// === Wrap adaptations into Promises
-							adaptations
-								.map(function (cmd) {
-									return {
-										type: cmd.toString(),
-										path: cmd.modelElement.path(),
-										execute: function () {
-											return new Promise(function (resolve, reject) {
-												cmd.execute(function (err) {
-													if (err) {
-														reject(err);
-													} else {
-														resolve();
-													}
+								var executedCmds = [];
+								// === Wrap adaptations into Promises
+								adaptations
+									.map(function (cmd) {
+										return {
+											type: cmd.toString(),
+											path: cmd.modelElement.path(),
+											execute: function () {
+												return new Promise(function (resolve, reject) {
+													cmd.execute(function (err) {
+														if (err) {
+															reject(err);
+														} else {
+															resolve();
+														}
+													});
 												});
-											});
-										},
-										undo: function () {
-											return new Promise(function (resolve, reject) {
-												cmd.undo(function (err) {
-													if (err) {
-														reject(err);
-													} else {
-														resolve();
-													}
+											},
+											undo: function () {
+												return new Promise(function (resolve, reject) {
+													cmd.undo(function (err) {
+														if (err) {
+															reject(err);
+														} else {
+															resolve();
+														}
+													});
 												});
-											});
-										}
-									};
-								}).reduce(function (previousExecution, next, index, adaptations) {
-									return previousExecution.then(function () {
-										if (index > 0) {
-											executedCmds.unshift(adaptations[index - 1]);
-										}
-										return next.execute();
-									});
-								}, Promise.resolve())
-								.then(function () {
-									// === All adaptations executed successfully :)
-									// set current model
-									self.currentModel = model;
-									// reset deployModel
-									self.deployModel = null;
-									// adaptations succeed : woot
-									self.log.info(self.toString(), (self.stopping ? 'Stop model' : 'Model') + ' deployed successfully: ' + adaptations.length + ' adaptations (' + (new Date().getTime() - start) + 'ms)');
-									// all good :)
-									// process script queue if any
-									self.processScriptQueue();
-									self.emit('deployed');
-									self.firstBoot = false;
-									callback();
-								})
-								.catch(function (err) {
-									// TODO how to handle adaptation failure when core is stopping ? (ignore failure?)
-									// === At least one adaptation failed
-									err.message = 'Something went wrong while executing adaptations.\n' + err.message;
-									self.log.error(self.toString(), err.stack);
-
-									if (self.firstBoot) {
-										// === If firstBoot deployment failed then it is bad => exit
-										self.log.warn(self.toString(), 'Shutting down Kevoree because first deployment failed...');
-										self.deployModel = null;
-										self.stop();
-										process.nextTick(function () {
-											callback(err);
+											}
+										};
+									}).reduce(function (previousExecution, next, index, adaptations) {
+										return previousExecution.then(function () {
+											if (index > 0) {
+												executedCmds.unshift(adaptations[index - 1]);
+											}
+											return next.execute();
 										});
-									} else {
-										// === If not firstBoot => try to rollback...
-										executedCmds
-											.reduce(function (previous, next) {
-												return previous.then(function () {
-													return next.undo();
-												});
-											}, Promise.resolve())
-											.then(function () {
-												// === Rollback success :)
-												self.log.info(self.toString(), 'Rollback succeed: ' + executedCmds.length + ' adaptations (' + (new Date().getTime() - start) + 'ms)');
-												self.deployModel = null;
-												self.emit('rollbackSucceed');
-												callback();
-											})
-											.catch(function (err) {
-												// === Rollback failed => cannot recover from this...
-												err.message = 'Something went wrong while rollbacking. Process will exit.\n' + err.message;
-												self.log.error(self.toString(), err.stack);
-												// stop everything :(
-												self.deployModel = null;
-												self.stop();
+									}, Promise.resolve())
+									.then(function () {
+										// === All adaptations executed successfully :)
+										// set current model
+										self.currentModel = model;
+										// reset deployModel
+										self.deployModel = null;
+										// adaptations succeed : woot
+										self.log.info(self.toString(), (self.stopping ? 'Stop model' : 'Model') + ' deployed successfully: ' + adaptations.length + ' adaptations (' + (new Date().getTime() - start) + 'ms)');
+										// all good :)
+										// process script queue if any
+										self.processScriptQueue();
+										self.emit('deployed');
+										self.firstBoot = false;
+										callback();
+									})
+									.catch(function (err) {
+										// TODO how to handle adaptation failure when core is stopping ? (ignore failure?)
+										// === At least one adaptation failed
+										err.message = 'Something went wrong while executing adaptations.\n' + err.message;
+										self.log.error(self.toString(), err.stack);
+
+										if (self.firstBoot) {
+											// === If firstBoot deployment failed then it is bad => exit
+											self.log.warn(self.toString(), 'Shutting down Kevoree because first deployment failed...');
+											self.deployModel = null;
+											self.stop();
+											process.nextTick(function () {
 												callback(err);
 											});
-									}
-								});
+										} else {
+											// === If not firstBoot => try to rollback...
+											executedCmds
+												.reduce(function (previous, next) {
+													return previous.then(function () {
+														return next.undo();
+													});
+												}, Promise.resolve())
+												.then(function () {
+													// === Rollback success :)
+													self.log.info(self.toString(), 'Rollback succeed: ' + executedCmds.length + ' adaptations (' + (new Date().getTime() - start) + 'ms)');
+													self.deployModel = null;
+													self.emit('rollbackSucceed');
+													callback();
+												})
+												.catch(function (err) {
+													// === Rollback failed => cannot recover from this...
+													err.message = 'Something went wrong while rollbacking. Process will exit.\n' + err.message;
+													self.log.error(self.toString(), err.stack);
+													// stop everything :(
+													self.deployModel = null;
+													self.stop();
+													callback(err);
+												});
+										}
+									});
+							} catch (err) {
+								self.log.error(self.toString(), err.stack);
+								var error = new Error('Something went wrong while creating adaptations (deployment ignored)');
+								self.log.warn(self.toString(), error.message);
+								if (self.firstBoot) {
+									// === If firstBoot adaptations creation failed then it is bad => exit
+									self.log.warn(self.toString(), 'Shutting down Kevoree because bootstrap failed...');
+									self.deployModel = null;
+									self.stop();
+									process.nextTick(function () {
+										callback(error);
+									});
+								} else {
+									callback(error);
+								}
+							}
 						} else {
 							callback(new Error('There is no instance to bootstrap on'));
 						}

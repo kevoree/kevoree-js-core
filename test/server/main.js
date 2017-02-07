@@ -124,6 +124,20 @@ describe('Kevoree Core', function () {
 		});
 	});
 
+	it('should stop when bootstrap failed on firstBoot', function (done) {
+		this.slow(300);
+		var model = readModel('unknown-du.json');
+		core.deploy(model, function (err) {
+			setTimeout(function () {
+				if (err) {
+					done();
+				} else {
+					done(new Error('Should have errored'));
+				}
+			});
+		});
+	});
+
 	it('should rollback when deploying erroneous component after firstBoot', function (done) {
 		this.slow(400);
 		var simpleModel = readModel('simple.json');
