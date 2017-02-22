@@ -133,7 +133,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 		if (model && !model.findNodesByID(this.nodeName)) {
 			callback(new Error('Deploy model failure: unable to find ' + this.nodeName + ' in given model'));
 		} else {
-			this.log.debug(this.toString(), 'Deploy process started...');
+			this.log.debug(this.toString(), (this.stopping ? 'Stopping':'Deploy') + ' process started...');
 			var start = new Date().getTime();
 			if (model) {
 				// check if there is an instance currently running
@@ -147,9 +147,10 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 						if (self.nodeInstance) {
 							var adaptations;
 							try {
-								// given model is defined and not null
+								// monkey-patch model because of KMF
+								monkeyPatchKMF(model);
 								var factory = new kevoree.factory.DefaultKevoreeFactory();
-								// clone model so that adaptations won't modify the current one
+								// clone model so that adaptations won't modify the proposed one
 								var cloner = factory.createModelCloner();
 								self.deployModel = cloner.clone(model, true);
 								// set it read-only to ensure adaptations consistency
@@ -189,12 +190,18 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 												});
 											}
 										};
-									}).reduce(function (previousExecution, next, index, adaptations) {
-										return previousExecution.then(function () {
+									}).reduce(function (previousCmd, next, index, adaptations) {
+										return previousCmd.then(function () {
 											if (index > 0) {
 												executedCmds.unshift(adaptations[index - 1]);
 											}
 											return next.execute();
+										}).catch(function (err) {
+											if (self.stopping) {
+												self.log.error(self.toString(), 'Adaptation error while stopping core...\n' + err.stack);
+											} else {
+												throw err;
+											}
 										});
 									}, Promise.resolve())
 									.then(function () {
@@ -208,9 +215,13 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 										// all good :)
 										// process script queue if any
 										self.processScriptQueue();
-										self.emit('deployed');
 										self.firstBoot = false;
-										callback();
+										try {
+											self.emit('deployed');
+											callback();
+										} catch (err) {
+											self.log.error(self.toString(), 'Error catched\n' + err.stack);
+										}
 									})
 									.catch(function (err) {
 										// TODO how to handle adaptation failure when core is stopping ? (ignore failure?)
@@ -249,6 +260,7 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 													self.deployModel = null;
 													self.stop();
 													callback(err);
+													self.emit('error', err);
 												});
 										}
 									});
@@ -256,16 +268,18 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 								self.log.error(self.toString(), err.stack);
 								var error = new Error('Something went wrong while creating adaptations (deployment ignored)');
 								self.log.warn(self.toString(), error.message);
+								self.deployModel = null;
 								if (self.firstBoot) {
 									// === If firstBoot adaptations creation failed then it is bad => exit
 									self.log.warn(self.toString(), 'Shutting down Kevoree because bootstrap failed...');
-									self.deployModel = null;
 									self.stop();
 									process.nextTick(function () {
 										callback(error);
+										self.emit('error', err);
 									});
 								} else {
 									callback(error);
+									self.emit('error', err);
 								}
 							}
 						} else {
@@ -524,6 +538,31 @@ KevoreeCore.prototype.getLogger = function () {
 KevoreeCore.prototype.off = function (event, listener) {
 	this.removeListener(event, listener);
 };
+
+function hash(str) {
+	var val = 0;
+	if (str.length === 0) {
+		return val;
+	}
+	for (var i = 0; i < str.length; i++) {
+		var char = str.charCodeAt(i);
+		val = ((val<<5)-val)+char;
+		val = val & val; // Convert to 32bit integer
+	}
+	return val + '';
+}
+
+function bindingHash(binding) {
+	var hubPath = binding.hub ? binding.hub.path() : 'UNDEFINED';
+	var portPath = binding.port ? binding.port.path() : 'UNDEFINED';
+	return hash(hubPath + '_' + portPath);
+}
+
+function monkeyPatchKMF(proposedModel) {
+	proposedModel.mBindings.array.forEach(function (possibleBinding) {
+		possibleBinding.generated_KMF_ID = bindingHash(possibleBinding);
+	});
+}
 
 /**
  *
