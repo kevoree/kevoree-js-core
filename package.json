@@ -1,13 +1,13 @@
 {
   "name": "kevoree-core",
-  "version": "9.0.4",
+  "version": "9.0.5",
   "description": "Kevoree Javascript platform core",
   "author": "Maxime Tricoire <max.tricoire@gmail.com>",
   "main": "./kevoree-core.js",
   "scripts": {
-    "lint": "eslint kevoree-core.js",
-    "prepublish": "npm run lint && webpack",
-    "test": "mocha test/server"
+    "lint": "eslint kevoree-core.js lib",
+    "prepublish": "npm run test && webpack",
+    "test": "npm run lint && mocha test/server"
   },
   "keywords": [
     "kevoree",

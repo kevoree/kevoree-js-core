@@ -137,7 +137,7 @@ describe('Kevoree Core', function () {
 			});
 		});
 	});
-
+	
 	it('should rollback when deploying erroneous component after firstBoot', function (done) {
 		this.slow(400);
 		var simpleModel = readModel('simple.json');
@@ -158,7 +158,6 @@ describe('Kevoree Core', function () {
 	});
 
 	afterEach('stop core', function (done) {
-		core.once('stopped', done);
-		core.stop();
+		core.stop(done);
 	});
 });

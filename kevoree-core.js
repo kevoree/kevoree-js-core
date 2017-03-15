@@ -3,6 +3,7 @@
 var kevoree = require('kevoree-library');
 var util = require('util');
 var EventEmitter = require('events').EventEmitter;
+var adaptationsExecutor = require('./lib/adaptation-executor');
 
 var NAME_PATTERN = /^[\w]+$/;
 
@@ -72,7 +73,11 @@ KevoreeCore.prototype.start = function (nodeName) {
 /**
  *
  */
-KevoreeCore.prototype.stop = function () {
+KevoreeCore.prototype.stop = function (callback) {
+	callback = callback || function noop() {};
+
+	this.emitter.once('stopped', callback);
+
 	var factory = new kevoree.factory.DefaultKevoreeFactory();
 	var cloner = factory.createModelCloner();
 	var stopModel = cloner.clone(this.currentModel, false);
@@ -134,16 +139,13 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 			callback(new Error('Deploy model failure: unable to find ' + this.nodeName + ' in given model'));
 		} else {
 			this.log.debug(this.toString(), (this.stopping ? 'Stopping':'Deploy') + ' process started...');
-			var start = new Date().getTime();
+			//var start = new Date().getTime();
 			if (model) {
 				// check if there is an instance currently running
 				// if not, it will try to run it
 				var self = this;
-				this.checkBootstrapNode(model, function (err) {
-					if (err) {
-						self.emit('error', err);
-						callback(err);
-					} else {
+				this.checkBootstrapNode(model)
+					.then(function () {
 						if (self.nodeInstance) {
 							var adaptations;
 							try {
@@ -157,113 +159,10 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 								self.deployModel.setRecursiveReadOnly();
 								// make a diff between the current model and the model to deploy
 								var diffSeq = factory.createModelCompare().diff(self.currentModel, self.deployModel);
-								// ask the node platform to create the needed adaptation primitives
+								// ask the node platform to create the needed adaptation commands
 								adaptations = self.nodeInstance.processTraces(diffSeq, self.deployModel);
-
-								var executedCmds = [];
-								// === Wrap adaptations into Promises
-								adaptations
-									.map(function (cmd) {
-										return {
-											type: cmd.toString(),
-											path: cmd.modelElement.path(),
-											execute: function () {
-												return new Promise(function (resolve, reject) {
-													cmd.execute(function (err) {
-														if (err) {
-															reject(err);
-														} else {
-															resolve();
-														}
-													});
-												});
-											},
-											undo: function () {
-												return new Promise(function (resolve, reject) {
-													cmd.undo(function (err) {
-														if (err) {
-															reject(err);
-														} else {
-															resolve();
-														}
-													});
-												});
-											}
-										};
-									}).reduce(function (previousCmd, next, index, adaptations) {
-										return previousCmd.then(function () {
-											if (index > 0) {
-												executedCmds.unshift(adaptations[index - 1]);
-											}
-											return next.execute();
-										}).catch(function (err) {
-											if (self.stopping) {
-												self.log.error(self.toString(), 'Adaptation error while stopping core...\n' + err.stack);
-											} else {
-												throw err;
-											}
-										});
-									}, Promise.resolve())
-									.then(function () {
-										// === All adaptations executed successfully :)
-										// set current model
-										self.currentModel = model;
-										// reset deployModel
-										self.deployModel = null;
-										// adaptations succeed : woot
-										self.log.info(self.toString(), (self.stopping ? 'Stop model' : 'Model') + ' deployed successfully: ' + adaptations.length + ' adaptations (' + (new Date().getTime() - start) + 'ms)');
-										// all good :)
-										// process script queue if any
-										self.processScriptQueue();
-										self.firstBoot = false;
-										try {
-											self.emit('deployed');
-											callback();
-										} catch (err) {
-											self.log.error(self.toString(), 'Error catched\n' + err.stack);
-										}
-									})
-									.catch(function (err) {
-										// TODO how to handle adaptation failure when core is stopping ? (ignore failure?)
-										// === At least one adaptation failed
-										err.message = 'Something went wrong while executing adaptations.\n' + err.message;
-										self.log.error(self.toString(), err.stack);
-
-										if (self.firstBoot) {
-											// === If firstBoot deployment failed then it is bad => exit
-											self.log.warn(self.toString(), 'Shutting down Kevoree because first deployment failed...');
-											self.deployModel = null;
-											self.stop();
-											process.nextTick(function () {
-												callback(err);
-											});
-										} else {
-											// === If not firstBoot => try to rollback...
-											executedCmds
-												.reduce(function (previous, next) {
-													return previous.then(function () {
-														return next.undo();
-													});
-												}, Promise.resolve())
-												.then(function () {
-													// === Rollback success :)
-													self.log.info(self.toString(), 'Rollback succeed: ' + executedCmds.length + ' adaptations (' + (new Date().getTime() - start) + 'ms)');
-													self.deployModel = null;
-													self.emit('rollbackSucceed');
-													callback();
-												})
-												.catch(function (err) {
-													// === Rollback failed => cannot recover from this...
-													err.message = 'Something went wrong while rollbacking. Process will exit.\n' + err.message;
-													self.log.error(self.toString(), err.stack);
-													// stop everything :(
-													self.deployModel = null;
-													self.stop();
-													callback(err);
-													self.emit('error', err);
-												});
-										}
-									});
+								// execute adaptation commands
+								adaptationsExecutor(self, model, adaptations, callback);
 							} catch (err) {
 								self.log.error(self.toString(), err.stack);
 								var error = new Error('Something went wrong while creating adaptations (deployment ignored)');
@@ -272,21 +171,21 @@ KevoreeCore.prototype.deploy = function (model, callback) {
 								if (self.firstBoot) {
 									// === If firstBoot adaptations creation failed then it is bad => exit
 									self.log.warn(self.toString(), 'Shutting down Kevoree because bootstrap failed...');
-									self.stop();
-									process.nextTick(function () {
-										callback(error);
-										self.emit('error', err);
-									});
+									callback(error);
+									self.emit('error', error);
 								} else {
 									callback(error);
-									self.emit('error', err);
+									self.emit('error', error);
 								}
 							}
 						} else {
 							callback(new Error('There is no instance to bootstrap on'));
 						}
-					}
-				});
+					})
+					.catch(function (err) {
+						self.emit('error', err);
+						callback(err);
+					});
 			} else {
 				callback(new Error('Model is not defined or null. Deploy aborted.'));
 			}
@@ -405,58 +304,54 @@ KevoreeCore.prototype.processScriptQueue = function () {
  * @param model
  * @param callback
  */
-KevoreeCore.prototype.checkBootstrapNode = function (deployModel, callback) {
-	if (!callback) {
-		throw new Error('No callback defined for checkBootstrapNode(model, cb) in KevoreeCore');
-	}
+KevoreeCore.prototype.checkBootstrapNode = function (deployModel) {
+	var self = this;
+	return new Promise(function (resolve, reject) {
+		if (self.bootstrapper) {
+			if (!self.nodeInstance) {
+				self.log.debug(self.toString(), 'Start \'' + self.nodeName + '\' bootstrapping...');
+				self.bootstrapper.bootstrapNodeType(self.nodeName, deployModel, function (err, AbstractNode) {
+					if (err) {
+						reject(err);
+					} else {
+						try {
+							var deployNode = deployModel.findNodesByID(self.nodeName);
+							var currentNode = self.currentModel.findNodesByID(self.nodeName);
 
-	if (this.bootstrapper) {
-		var self = this;
-		if (!this.nodeInstance) {
-			this.log.debug(this.toString(), 'Start \'' + this.nodeName + '\' bootstrapping...');
-			this.bootstrapper.bootstrapNodeType(this.nodeName, deployModel, function (err, AbstractNode) {
-				if (err) {
-					callback(err);
-				} else {
-					var error;
-					try {
-						var deployNode = deployModel.findNodesByID(self.nodeName);
-						var currentNode = self.currentModel.findNodesByID(self.nodeName);
+							// create node instance
+							self.nodeInstance = new AbstractNode(self, deployNode, self.nodeName);
 
-						// create node instance
-						self.nodeInstance = new AbstractNode(self, deployNode, self.nodeName);
-
-						// bootstrap node dictionary
-						var factory = new kevoree.factory.DefaultKevoreeFactory();
-						currentNode.dictionary = factory.createDictionary().withGenerated_KMF_ID('0');
-						if (deployNode.typeDefinition.dictionaryType) {
-							deployNode.typeDefinition.dictionaryType.attributes.array.forEach(function (attr) {
-								if (!attr.fragmentDependant) {
-									var param = factory.createValue();
-									param.name = attr.name;
-									var currVal = deployNode.dictionary.findValuesByID(param.name);
-									if (!currVal) {
-										param.value = attr.defaultValue;
-										currentNode.dictionary.addValues(param);
-										self.log.debug(self.toString(), 'Set default node param: ' + param.name + '=' + param.value);
+							// bootstrap node dictionary
+							var factory = new kevoree.factory.DefaultKevoreeFactory();
+							currentNode.dictionary = factory.createDictionary().withGenerated_KMF_ID('0');
+							if (deployNode.typeDefinition.dictionaryType) {
+								deployNode.typeDefinition.dictionaryType.attributes.array.forEach(function (attr) {
+									if (!attr.fragmentDependant) {
+										var param = factory.createValue();
+										param.name = attr.name;
+										var currVal = deployNode.dictionary.findValuesByID(param.name);
+										if (!currVal) {
+											param.value = attr.defaultValue;
+											currentNode.dictionary.addValues(param);
+											self.log.debug(self.toString(), 'Set default node param: ' + param.name + '=' + param.value);
+										}
 									}
-								}
-							});
+								});
+							}
+							resolve();
+						} catch (err) {
+							reject(err);
 						}
-					} catch (err) {
-						error = err;
 					}
-
-					callback(error);
-				}
-			});
+				});
+			} else {
+				// bootstrap already done :)
+				resolve();
+			}
 		} else {
-			// bootstrap already done :)
-			callback();
+			reject(new Error('No bootstrapper given to this core. Did you set one?'));
 		}
-	} else {
-		callback(new Error('No bootstrapper given to this core. Did you set one?'));
-	}
+	});
 };
 
 /**
@@ -542,14 +437,14 @@ KevoreeCore.prototype.off = function (event, listener) {
 function hash(str) {
 	var val = 0;
 	if (str.length === 0) {
-		return val;
+		return val + '';
 	}
 	for (var i = 0; i < str.length; i++) {
 		var char = str.charCodeAt(i);
-		val = ((val<<5)-val)+char;
+		val = ((val<<5) - val) + char;
 		val = val & val; // Convert to 32bit integer
 	}
-	return val + '';
+	return (val & 0xfffffff) + '';
 }
 
 function bindingHash(binding) {
